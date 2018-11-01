@@ -1,5 +1,5 @@
 **rage-eventbus** simplifies two-way communication between the RAGE Multiplayer server, client, and browser instances.
-It can be used as a full-on replacement for RAGE's built-in `mp.event` API, providing consistency and clarity.
+It can be used as a full-on replacement for RAGE's built-in `mp.events` API, providing consistency and clarity.
 
 ---
 

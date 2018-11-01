@@ -4,24 +4,27 @@ const environment = util.getEnvironment();
 if(!environment) throw 'Unknown RAGE environment';
 
 const PROCESS_EVENT = '__rpc:process';
+const PROCEDURE_EXISTS = '__rpc:exists';
 
 const rpc = {};
 
 const listeners = {};
 const pending = {};
 
+let passEventToBrowser, passEventToBrowsers;
+if(environment === "client"){
+    passEventToBrowser = (browser, raw) => {
+        browser.execute(`var process = window["${PROCESS_EVENT}"] || function(){}; process('${raw}');`);
+    };
+
+    passEventToBrowsers = (raw) => {
+        mp.browsers.forEach(browser => passEventToBrowser(browser, raw));
+    };
+}
+
 async function callProcedure(name, args, info){
     if(!listeners[name]) throw 'PROCEDURE_NOT_FOUND';
     return listeners[name](args, info);
-}
-
-let passEventToBrowsers;
-if(environment === "client"){
-    passEventToBrowsers = (raw) => {
-        mp.browsers.forEach(browser => {
-            browser.execute(`var process = window["${PROCESS_EVENT}"] || function(){}; process('${raw}');`);
-        });
-    };
 }
 
 const processEvent = (...args) => {
@@ -45,12 +48,12 @@ const processEvent = (...args) => {
         };
         if(environment === "server") info.player = args[0];
         const promise = callProcedure(data.name, data.args, info);
+        const part = {
+            ret: 1,
+            id: data.id
+        };
         switch(environment){
             case "server": {
-                const part = {
-                    ret: 1,
-                    id: data.id
-                };
                 if(data.thru) part.thru = 1;
                 promise.then(res => {
                     info.player.call(PROCESS_EVENT, [util.stringifyData({
@@ -66,10 +69,6 @@ const processEvent = (...args) => {
                 break;
             }
             case "client": {
-                const part = {
-                    ret: 1,
-                    id: data.id
-                };
                 if(data.env === "server"){
                     promise.then(res => {
                         mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
@@ -97,6 +96,19 @@ const processEvent = (...args) => {
                 }
                 break;
             }
+            case "cef": {
+                promise.then(res => {
+                    mp.trigger(PROCESS_EVENT, util.stringifyData({
+                        ...part,
+                        res
+                    }));
+                }).catch(err => {
+                    mp.trigger(PROCESS_EVENT, util.stringifyData({
+                        ...part,
+                        err
+                    }));
+                });
+            }
         }
     }else if(data.ret){ // a previously called remote procedure has returned
         const info = pending[data.id];
@@ -110,6 +122,7 @@ const processEvent = (...args) => {
 
 if(environment === "cef"){
     window[PROCESS_EVENT] = processEvent;
+    window[PROCEDURE_EXISTS] = name => !!listeners[name];
 }else{
     mp.events.add(PROCESS_EVENT, processEvent);
 }
@@ -193,6 +206,8 @@ rpc.callServer = (name, args) => {
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
  */
+//callClient(player, name, args)
+//callClient(name, args)
 rpc.callClient = (player, name, args) => {
     if(typeof player === "string"){
         if(environment === "server") return Promise.reject('This syntax can only be used in browser and client environments.');
@@ -237,6 +252,46 @@ rpc.callClient = (player, name, args) => {
             });
         }
     }
+};
+
+rpc.callBrowser = async (name, args) => {
+    const id = util.uid();
+    const numBrowsers = mp.browsers.length;
+    let browser;
+    for(let i = 0; i < numBrowsers; i++){
+        const b = mp.browsers.at(i);
+        await new Promise(resolve => {
+            const existsHandler = str => {
+                const parts = str.split(':');
+                if(parts[0] === id){
+                    if(+parts[1]){
+                        browser = b;
+                    }
+                }
+                mp.events.remove(PROCEDURE_EXISTS, existsHandler);
+                resolve();
+            };
+            mp.events.add(PROCEDURE_EXISTS, existsHandler);
+            b.execute(`var f = window["${PROCEDURE_EXISTS}"]; mp.trigger("${PROCEDURE_EXISTS}", "${id}:"+((f && f("${name}")) ? 1 : 0));`);
+        });
+        if(browser) break;
+    }
+    if(browser){
+        return new Promise((resolve, reject) => {
+            pending[id] = {
+                resolve,
+                reject
+            };
+            passEventToBrowser(browser, util.stringifyData({
+                req: 1,
+                id,
+                name,
+                env: environment,
+                args
+            }));
+        });
+    }
+    return Promise.reject('PROCEDURE_NOT_FOUND');
 };
 
 module.exports = rpc;

@@ -1,9 +1,11 @@
 **rage-eventbus** simplifies two-way communication between the RAGE Multiplayer server, client, and browser instances.
 It can be used as a full-on replacement for RAGE's built-in `mp.event` API, providing consistency and clarity.
 
-### Examples
+---
 
-#### Server to Client
+## Examples
+
+### Server to Client
 
 **Situation:** The server wants to ask a specific player if they are currently running.
 
@@ -36,7 +38,7 @@ rbus.on('getIsRunning', () => mp.players.local.isRunning);
 
 ---
 
-#### CEF to Server
+### CEF to Server
 
 **Situation:** A CEF instance wants a list of all vehicle license plates directly from the server.
 

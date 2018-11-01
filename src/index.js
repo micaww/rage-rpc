@@ -32,15 +32,6 @@ const processEvent = (...args) => {
     if(environment === "server") rawData = args[1];
     const data = util.parseData(rawData);
 
-    if(data.thru && environment === "client"){
-        if(data.req){ // a CEF request is trying to get to the server
-            mp.events.callRemote(PROCESS_EVENT, rawData);
-        }else if(data.ret){ // a server response is trying to get to a CEF instance
-            passEventToBrowsers(rawData);
-        }
-        return;
-    }
-
     if(data.req){ // someone is trying to remotely call a procedure
         const info = {
             id: data.id,
@@ -54,7 +45,6 @@ const processEvent = (...args) => {
         };
         switch(environment){
             case "server": {
-                if(data.thru) part.thru = 1;
                 promise.then(res => {
                     info.player.call(PROCESS_EVENT, [util.stringifyData({
                         ...part,
@@ -180,7 +170,7 @@ rpc.callServer = (name, args) => {
             });
         }
         case "cef": {
-            const id = util.uid();
+            /*const id = util.uid();
             return new Promise((resolve, reject) => {
                 pending[id] = {
                     resolve,
@@ -194,7 +184,7 @@ rpc.callServer = (name, args) => {
                     args,
                     thru: 1
                 }));
-            });
+            });*/
         }
     }
 };
@@ -206,8 +196,11 @@ rpc.callServer = (name, args) => {
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
  */
-//callClient(player, name, args)
-//callClient(name, args)
+// serverside
+// callClient(player, name, args)
+//
+// clientside or cef
+// callClient(name, args)
 rpc.callClient = (player, name, args) => {
     if(typeof player === "string"){
         if(environment === "server") return Promise.reject('This syntax can only be used in browser and client environments.');
@@ -254,6 +247,20 @@ rpc.callClient = (player, name, args) => {
     }
 };
 
+/**
+ * Calls a remote procedure registered in any browser context.
+ * @param {string} name - The name of the registered procedure.
+ * @param args - Any parameters for the procedure.
+ * @returns {Promise} - The result from the procedure.
+ */
+//serverside
+//callBrowser(player, name, args)
+//
+//clientside or cef
+//callBrowser(name, args)
+//
+//clientside
+//callBrowser(browser, name, args)
 rpc.callBrowser = async (name, args) => {
     const id = util.uid();
     const numBrowsers = mp.browsers.length;

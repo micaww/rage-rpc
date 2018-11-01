@@ -43,7 +43,7 @@ const isClimbing = await rpc.callClient(player, 'getIsClimbing');
 
 ##### Server-side
 ```javascript
-constrpc = require('rage-rpc');
+const rpc = require('rage-rpc');
 
 rpc.register('getAllLicensePlates', () => mp.vehicles.toArray().map(vehicle => vehicle.numberPlate));
 ```

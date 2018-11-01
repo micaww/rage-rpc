@@ -15,6 +15,15 @@ async function callProcedure(name, args, info){
     return listeners[name](args, info);
 }
 
+let passEventToBrowsers;
+if(environment === "client"){
+    passEventToBrowsers = (raw) => {
+        mp.browsers.forEach(browser => {
+            browser.execute(`var process = window["${PROCESS_EVENT}"] || function(){}; process('${raw}');`);
+        });
+    };
+}
+
 const processEvent = (...args) => {
     let rawData = args[0];
     if(environment === "server") rawData = args[1];
@@ -24,9 +33,7 @@ const processEvent = (...args) => {
         if(data.req){ // a CEF request is trying to get to the server
             mp.events.callRemote(PROCESS_EVENT, rawData);
         }else if(data.ret){ // a server response is trying to get to a CEF instance
-            mp.browsers.forEach(browser => {
-                browser.execute(`var process = window["${PROCESS_EVENT}"] || function(){}; process('${rawData}');`); // send data to every instance
-            });
+            passEventToBrowsers(rawData);
         }
         return;
     }
@@ -59,19 +66,35 @@ const processEvent = (...args) => {
                 break;
             }
             case "client": {
-                promise.then(res => {
-                    mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
-                        ret: 1,
-                        id: data.id,
-                        res
-                    }));
-                }).catch(err => {
-                    mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
-                        ret: 1,
-                        id: data.id,
-                        err
-                    }));
-                });
+                const part = {
+                    ret: 1,
+                    id: data.id
+                };
+                if(data.env === "server"){
+                    promise.then(res => {
+                        mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
+                            ...part,
+                            res
+                        }));
+                    }).catch(err => {
+                        mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
+                            ...part,
+                            err
+                        }));
+                    });
+                }else if(data.env === "cef"){
+                    promise.then(res => {
+                        passEventToBrowsers(util.stringifyData({
+                            ...part,
+                            res
+                        }));
+                    }).catch(err => {
+                        passEventToBrowsers(util.stringifyData({
+                            ...part,
+                            err
+                        }));
+                    });
+                }
                 break;
             }
         }
@@ -165,12 +188,17 @@ rpc.callServer = (name, args) => {
 
 /**
  * Calls a remote procedure registered on the client.
- * @param player - The player to call the procedure on.
+ * @param [player] - The player to call the procedure on.
  * @param {string} name - The name of the registered procedure.
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
  */
 rpc.callClient = (player, name, args) => {
+    if(typeof player === "string"){
+        if(environment === "server") return Promise.reject('This syntax can only be used in browser and client environments.');
+        args = name;
+        name = player;
+    }
     switch(environment){
         case "client": {
             if(player === mp.players.local) return rpc.call(name, args);
@@ -190,6 +218,22 @@ rpc.callClient = (player, name, args) => {
                     env: environment,
                     args
                 })]);
+            });
+        }
+        case "cef": {
+            const id = util.uid();
+            return new Promise((resolve, reject) => {
+                pending[id] = {
+                    resolve,
+                    reject
+                };
+                mp.trigger(PROCESS_EVENT, util.stringifyData({
+                    req: 1,
+                    id,
+                    name,
+                    env: environment,
+                    args
+                }));
             });
         }
     }

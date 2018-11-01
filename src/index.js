@@ -16,9 +16,20 @@ async function callProcedure(name, args, info){
 }
 
 const processEvent = (...args) => {
-    let data = args[0];
-    if(environment === "server") data = args[1];
-    data = util.parseData(data);
+    let rawData = args[0];
+    if(environment === "server") rawData = args[1];
+    const data = util.parseData(rawData);
+
+    if(data.thru && environment === "client"){
+        if(data.req){ // a CEF request is trying to get to the server
+            mp.events.callRemote(PROCESS_EVENT, rawData);
+        }else if(data.ret){ // a server response is trying to get to a CEF instance
+            mp.browsers.forEach(browser => {
+                browser.execute(`var process = window["${PROCESS_EVENT}"] || function(){}; process('${rawData}');`); // send data to every instance
+            });
+        }
+        return;
+    }
 
     if(data.req){ // someone is trying to remotely call a procedure
         const info = {
@@ -29,16 +40,19 @@ const processEvent = (...args) => {
         const promise = callProcedure(data.name, data.args, info);
         switch(environment){
             case "server": {
+                const part = {
+                    ret: 1,
+                    id: data.id
+                };
+                if(data.thru) part.thru = 1;
                 promise.then(res => {
                     info.player.call(PROCESS_EVENT, [util.stringifyData({
-                        ret: 1,
-                        id: data.id,
+                        ...part,
                         res
                     })]);
                 }).catch(err => {
                     info.player.call(PROCESS_EVENT, [util.stringifyData({
-                        ret: 1,
-                        id: data.id,
+                        ...part,
                         err
                     })]);
                 });
@@ -71,7 +85,11 @@ const processEvent = (...args) => {
     }
 };
 
-mp.events.add(PROCESS_EVENT, processEvent);
+if(environment === "cef"){
+    window[PROCESS_EVENT] = processEvent;
+}else{
+    mp.events.add(PROCESS_EVENT, processEvent);
+}
 
 /**
  * Register a procedure.
@@ -122,6 +140,23 @@ rpc.callServer = (name, args) => {
                     name,
                     env: environment,
                     args
+                }));
+            });
+        }
+        case "cef": {
+            const id = util.uid();
+            return new Promise((resolve, reject) => {
+                pending[id] = {
+                    resolve,
+                    reject
+                };
+                mp.trigger(PROCESS_EVENT, util.stringifyData({
+                    req: 1,
+                    id,
+                    name,
+                    env: environment,
+                    args,
+                    thru: 1
                 }));
             });
         }

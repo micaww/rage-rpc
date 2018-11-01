@@ -15,5 +15,6 @@
   "bugs": {
     "url": "https://github.com/micaww/rage-eventbus/issues"
   },
-  "homepage": "https://github.com/micaww/rage-eventbus#readme"
+  "homepage": "https://github.com/micaww/rage-eventbus#readme",
+  "dependencies": {}
 }

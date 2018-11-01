@@ -1,0 +1,19 @@
+{
+  "name": "rage-eventbus",
+  "version": "0.0.1",
+  "description": "An asynchronous event bus for RAGE Multiplayer",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/micaww/rage-eventbus.git"
+  },
+  "author": "micaww",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/micaww/rage-eventbus/issues"
+  },
+  "homepage": "https://github.com/micaww/rage-eventbus#readme"
+}

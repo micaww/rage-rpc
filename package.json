@@ -1,20 +1,20 @@
 {
-  "name": "rage-eventbus",
+  "name": "rage-rpc",
   "version": "0.0.1",
-  "description": "An asynchronous event bus for RAGE Multiplayer",
+  "description": "An asynchronous RPC implementation for RAGE Multiplayer",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/micaww/rage-eventbus.git"
+    "url": "git+https://github.com/micaww/rage-rpc.git"
   },
   "author": "micaww",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/micaww/rage-eventbus/issues"
+    "url": "https://github.com/micaww/rage-rpc/issues"
   },
-  "homepage": "https://github.com/micaww/rage-eventbus#readme",
+  "homepage": "https://github.com/micaww/rage-rpc#readme",
   "dependencies": {}
 }

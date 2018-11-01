@@ -1,4 +1,4 @@
-**rage-rpc** simplifies two-way communication between the RAGE Multiplayer server, client, and browser instances by providing a easy to use API for calling remote code and expecting results.
+**rage-rpc** simplifies two-way communication between the RAGE Multiplayer server, client, and browser instances by providing a easy-to-use API for calling remote code and retrieving results.
 
 ---
 

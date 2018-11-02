@@ -22,6 +22,8 @@ From here, you can simply require the package in any RAGE context:
 
 ```javascript
 const rpc = require('rage-rpc');
+
+rpc.register('hi', () => 'hello!');
 ```
 
 #### Option 2
@@ -30,6 +32,8 @@ In the `dist/` folder of this repository is a single minified JS file that you c
 
 ```javascript
 const rpc = require('./rage-rpc.min.js');
+
+rpc.register('hi', () => 'hello!');
 ```
 
 #### Option 3 (Browser Only)
@@ -156,4 +160,253 @@ log("Hello again!").then(() => {
 });
 ```
 
-Note that once any side of the game registers a procedure, any context can immediately start accessing it. You could call `rpc.callServer('log', message);` from any CEF instance or anywhere in the client without any further setup.
+**Note:** Once any side of the game registers a procedure, any context can immediately start accessing it. You could call `rpc.callServer('log', message);` from any CEF instance or anywhere in the client without any further setup.
+
+## API
+
+This library is universal to RAGE, which means you can load the same package into all 3 contexts: browser, client JS, and server JS.
+
+There are only 7 functions that you can use almost anywhere around your game. However, depending on the current context, the usage of some functions might differ slightly.
+
+### Universal
+
+#### register(name, callback)
+
+Registers a procedure in the current context.
+
+The return value of the `callback` will be sent back to the caller, even if it fails. If a [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) is returned, it will finish before returning its result or error to the caller.
+
+**The return value must be JSON-able in order to be sent over the network.** This doesn't matter if the procedure call is local.
+
+##### Parameters
+
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The unique identifier, relative to the current context, of the procedure.
+* `callback` [function](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function) - The procedure. This function will receive 2 arguments.
+    * `args` - The arguments that were provided by the caller. This parameter's type will be the same that was sent by the caller. `undefined` if no arguments were sent.
+    * `info` [object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) - Various information about the caller.
+        * `id` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The internal ID used to keep track of this request.
+        * `environment` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The caller's environment. Can be `cef`, `client`, or `server`.
+        * `player` [Player](https://wiki.rage.mp/index.php?title=Server-side_functions#Player) - The caller. *Only exists in the server context if remotely called from `cef` or `client`.*
+
+##### Examples
+
+```javascript
+rpc.register('hello', () => 'hi!');
+```
+
+Returns `hi!` to the caller.
+
+---
+
+```javascript
+rpc.register('getUser', async (id) => {
+    const user = await someLongOperationThatReturnsUserFromId(id);
+    return user;
+});
+```
+
+Waits for the returned [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) to finish before returning the resolved user to the caller.
+
+---
+
+```javascript
+rpc.register('echo', (message, info) => {
+    console.log(`${info.player.name} via ${info.environment}: ${message}`);
+});
+```
+
+*Server-side example only.* The passed argument will be logged to the console along with the caller's name and the environment which they called from.
+
+#### unregister(name)
+
+Unregisters a procedure from the current context. It will no longer take requests unless it is re-registered.
+
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The unique identifier, relative to the current context, of the procedure.
+
+#### call(name, args)
+
+Calls a procedure that has been registered in the current context.
+
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The name of the previously registered procedure.
+* `args?` - Optional arguments to pass to the procedure. Can be of any type, since `call` does not traverse the network.
+
+##### Example
+
+```javascript
+rpc.register('hi', () => 'hello!');
+
+rpc.call('hi').then(result => {
+    // result = hello!
+    console.log(result);
+}).catch(err => {
+    console.error(err);
+});
+```
+
+###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+#### callServer(name, args)
+
+Calls a procedure that has been registered on the server.
+
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The name of the previously registered procedure.
+* `args?` - Optional arguments to pass to the procedure. Must be JSON-able if the current context is not the server. Use an array or object to pass multiple arguments.
+
+##### Example
+
+Server-side:
+```javascript
+rpc.register('getWeather', () => mp.world.weather);
+```
+
+Client-side OR Browser OR Server:
+```javascript
+rpc.callServer('getWeather').then(weather => {
+    mp.gui.chat.push(`The current weather is ${weather}.`);
+}).catch(err => {
+    // handle error
+});
+```
+
+###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+### Server-side
+
+#### callClient(player, name, args)
+
+Calls a procedure that has been registered on a specific client.
+
+* `player` [Player](https://wiki.rage.mp/index.php?title=Server-side_functions#Player) - The player to call the procedure on.
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The name of the registered procedure.
+* `args?` - Optional arguments to pass to the procedure. Must be JSON-able. Use an array or object to pass multiple arguments.
+
+##### Example
+
+Client-side:
+```javascript
+rpc.register('toggleChat', toggle => {
+    mp.gui.chat.show(toggle);
+});
+```
+
+Server-side:
+```javascript
+mp.players.forEach(player => {
+    rpc.callClient(player, 'toggleChat', false);
+});
+```
+
+###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+#### callBrowsers(player, name, args)
+
+Calls a procedure that has been registered in any CEF instance on a specific client.
+
+Any CEF instance can register the procedure. The client will iterate through each instance and call the procedure on the first instance that it exists on.
+
+* `player` [Player](https://wiki.rage.mp/index.php?title=Server-side_functions#Player) - The player to call the procedure on.
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The name of the registered procedure.
+* `args?` - Optional arguments to pass to the procedure. Must be JSON-able. Use an array or object to pass multiple arguments.
+
+##### Example
+
+Browser:
+```javascript
+rpc.register('toggleHUD', toggle => {
+    // if jQuery is your thing
+    $('#hud').toggle(toggle);
+});
+```
+
+Server-side:
+```javascript
+mp.players.forEach(player => {
+    rpc.callClient(player, 'toggleChat', false);
+});
+```
+
+###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+### Client-side
+
+#### callBrowser(browser, name, args)
+
+Calls a procedure that has been registered in a specific CEF instance.
+
+* `browser` [Browser](https://wiki.rage.mp/index.php?title=Client-side_functions#Browser) - The browser to call the procedure on.
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The name of the registered procedure.
+* `args?` - Optional arguments to pass to the procedure. Must be JSON-able. Use an array or object to pass multiple arguments.
+
+##### Example
+
+Browser:
+```javascript
+rpc.register('getInputValue', () => {
+    // if jQuery is your thing
+    return $('#input').val();
+});
+```
+
+Client-side:
+```javascript
+const browser = mp.browsers.at(0);
+
+rpc.callBrowser(browser, 'getInputValue').then(value => {
+    mp.gui.chat.push(`The CEF input value is: ${value}`);
+}).catch(err => {
+    // handle errors
+});
+```
+
+###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+### CEF or Client-side
+
+#### callBrowsers(name, args)
+
+Calls a procedure that has been registered in any CEF instance on a specific client.
+
+Any CEF instance can register the procedure. The client will iterate through each instance and call the procedure on the first instance that it exists on.
+
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The name of the registered procedure.
+* `args?` - Optional arguments to pass to the procedure. Must be JSON-able. Use an array or object to pass multiple arguments.
+
+##### Example
+
+Browser:
+```javascript
+rpc.register('toggleHUD', toggle => {
+    // if jQuery is your thing
+    $('#hud').toggle(toggle);
+});
+```
+
+Client-side OR Browser:
+```javascript
+rpc.callBrowsers('toggleChat', false);
+```
+
+###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+#### callClient(name, args)
+
+Calls a procedure that has been registered on the local client.
+
+* `name` [string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String) - The name of the registered procedure.
+* `args?` - Optional arguments to pass to the procedure. Must be JSON-able if the current context is not this client. Use an array or object to pass multiple arguments.
+
+##### Example
+
+Client-side:
+```javascript
+rpc.register('toggleChat', toggle => {
+    mp.gui.chat.show(toggle);
+});
+```
+
+Client-side OR Browser:
+```javascript
+rpc.callClient('toggleChat', false);
+```
+
+###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.

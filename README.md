@@ -1,3 +1,24 @@
+* [Motivation](#motivation)
+* [Installation](#installation)
+* [Examples](#examples)
+    * [Server to Client](#server-to-client)
+    * [CEF to Server](#cef-to-server)
+    * [Client to Server](#client-to-server)
+* [API](#api)
+    * [Universal](#universal)
+        * [register(name, callback)](#registername-callback)
+        * [unregister(name)](#unregistername)
+        * [call(name, args)](#callname-args)
+        * [callServer(name, args)](#callservername-args)
+    * [Server-side](#server-side-3)
+        * [callClient(player, name, args)](#callclientplayer-name-args)
+        * [callBrowsers(player, name, args)](#callbrowsersplayer-name-args)
+    * [Client-side](#client-side-2)
+        * [callBrowser(browser, name, args)](#callbrowserbrowser-name-args)
+    * [CEF or Client-side](#cef-or-client-side)
+        * [callBrowsers(name, args)](#callbrowsersname-args)
+        * [callClient(name, args)](#callclientname-args)
+
 ## Motivation
 
 A very common workflow when developing with any kind of client-server platform is not only sending data between the server and clients, but also receiving data back after performing some kind of action. An example would be a client asking for information from a database in order to display to the user. One technique to achieve this is called [remote procedure calls (RPC)](https://en.wikipedia.org/wiki/Remote_procedure_call) which allows one application context to call code in a completely separate context and return the result back to the caller, as if it were local to begin with.

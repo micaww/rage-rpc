@@ -3,6 +3,8 @@ const util  = require('./util.js');
 const environment = util.getEnvironment();
 if(!environment) throw 'Unknown RAGE environment';
 
+const ERR_NOT_FOUND = 'PROCEDURE_NOT_FOUND';
+
 const PROCESS_EVENT = '__rpc:process';
 const PROCEDURE_EXISTS = '__rpc:exists';
 
@@ -13,17 +15,18 @@ const pending = {};
 
 let passEventToBrowser, passEventToBrowsers;
 if(environment === "client"){
-    passEventToBrowser = (browser, raw) => {
-        browser.execute(`var process = window["${PROCESS_EVENT}"] || function(){}; process('${raw}');`);
+    passEventToBrowser = (browser, data) => {
+        const raw = util.stringifyData(data);
+        browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process('${raw}'); }else{ mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}"}'); }`);
     };
 
-    passEventToBrowsers = (raw) => {
-        mp.browsers.forEach(browser => passEventToBrowser(browser, raw));
+    passEventToBrowsers = (data) => {
+        mp.browsers.forEach(browser => passEventToBrowser(browser, data));
     };
 }
 
 async function callProcedure(name, args, info){
-    if(!listeners[name]) throw 'PROCEDURE_NOT_FOUND';
+    if(!listeners[name]) throw ERR_NOT_FOUND;
     return listeners[name](args, info);
 }
 
@@ -73,15 +76,15 @@ const processEvent = (...args) => {
                     });
                 }else if(data.env === "cef"){
                     promise.then(res => {
-                        passEventToBrowsers(util.stringifyData({
+                        passEventToBrowsers({
                             ...part,
                             res
-                        }));
+                        });
                     }).catch(err => {
-                        passEventToBrowsers(util.stringifyData({
+                        passEventToBrowsers({
                             ...part,
                             err
-                        }));
+                        });
                     });
                 }
                 break;
@@ -122,7 +125,8 @@ if(environment === "cef"){
  * @param {string} name - The name of the procedure.
  * @param {function} cb - The procedure's callback. The return value will be sent back to the caller.
  */
-rpc.register = (name, cb) => {
+rpc.register = function(name, cb){
+    if(arguments.length !== 2) throw 'register expects 2 arguments: "name" and "cb"';
     listeners[name] = cb;
 };
 
@@ -130,17 +134,24 @@ rpc.register = (name, cb) => {
  * Unregister a procedure.
  * @param {string} name - The name of the procedure.
  */
-rpc.unregister = (name) => {
+rpc.unregister = function(name){
+    if(arguments.length !== 1) throw 'unregister expects 1 argument: "name"';
     listeners[name] = undefined;
 };
 
 /**
- * Calls a local procedure.
+ * Calls a local procedure. Only procedures registered in the same context will be resolved.
+ *
+ * Can be called from any environment.
+ *
  * @param {string} name - The name of the locally registered procedure.
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
  */
-rpc.call = (name, args) => callProcedure(name, args, { environment });
+rpc.call = function(name, args){
+    if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('call expects 1 or 2 arguments: "name" and optional "args"');
+    return callProcedure(name, args, { environment });
+};
 
 function callServer(name, args, extraData){
     switch(environment){
@@ -172,17 +183,24 @@ function callServer(name, args, extraData){
 
 /**
  * Calls a remote procedure registered on the server.
+ *
+ * Can be called from any environment.
+ *
  * @param {string} name - The name of the registered procedure.
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
  */
-rpc.callServer = (name, args) => {
+rpc.callServer = function(name, args){
+    if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('callServer expects 1 or 2 arguments: "name" and optional "args"');
     return callServer(name, args, {});
 };
 
 /**
  * Calls a remote procedure registered on the client.
- * @param [player] - The player to call the procedure on.
+ *
+ * Can be called from any environment.
+ *
+ * @param player - The player to call the procedure on.
  * @param {string} name - The name of the registered procedure.
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
@@ -192,18 +210,16 @@ rpc.callServer = (name, args) => {
 //
 // clientside or cef
 // callClient(name, args)
-rpc.callClient = (player, name, args) => {
-    if(typeof player === "string"){
-        if(environment === "server") return Promise.reject('This syntax can only be used in browser and client environments.');
-        args = name;
-        name = player;
-    }
+rpc.callClient = function(player, name, args){
     switch(environment){
         case "client": {
-            if(player === mp.players.local) return rpc.call(name, args);
-            else return Promise.reject('Only the server can RPC to other clients.');
+            args = name;
+            name = player;
+            if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return Promise.reject('callClient from the client expects 1 or 2 arguments: "name" and optional "args"');
+            return rpc.call(name, args);
         }
         case "server": {
+            if((arguments.length !== 2 && arguments.length !== 3) || typeof player !== "object") return Promise.reject('callClient from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
             const id = util.uid();
             return new Promise((resolve, reject) => {
                 pending[id] = {
@@ -220,14 +236,10 @@ rpc.callClient = (player, name, args) => {
             });
         }
         case "cef": {
+            args = name;
+            name = player;
+            if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return Promise.reject('callClient from the browser expects 1 or 2 arguments: "name" and optional "args"');
             const id = util.uid();
-            console.log('CEF IS CALLING THE CLIENT WITH THIS DATA: ', {
-                req: 1,
-                id,
-                name,
-                env: environment,
-                args
-            });
             return new Promise((resolve, reject) => {
                 pending[id] = {
                     resolve,
@@ -251,14 +263,14 @@ function callBrowser(id, browser, name, args, extraData){
             resolve,
             reject
         };
-        passEventToBrowser(browser, util.stringifyData({
+        passEventToBrowser(browser, {
             req: 1,
             id,
             name,
             env: environment,
             args,
             ...extraData
-        }));
+        });
     });
 }
 async function callBrowsers(player, name, args, extraData){
@@ -288,7 +300,7 @@ async function callBrowsers(player, name, args, extraData){
                 if(browser) break;
             }
             if(browser) return callBrowser(id, browser, name, args, extraData);
-            throw 'PROCEDURE_NOT_FOUND';
+            throw ERR_NOT_FOUND;
         }
         case "server": {
             return rpc.callClient(player, '__rpc:callBrowsers', [name, args]);
@@ -311,16 +323,16 @@ async function callBrowsers(player, name, args, extraData){
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
  */
-rpc.callBrowsers = async function(player, name, args){
+rpc.callBrowsers = function(player, name, args){
     switch(environment){
         case "client":
-            if(arguments.length !== 1 && arguments.length !== 2) throw 'callBrowsers from the client expects 1 or 2 arguments: "name" and optional "args"';
+            if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('callBrowsers from the client expects 1 or 2 arguments: "name" and optional "args"');
             break;
         case "server":
-            if(arguments.length !== 2 && arguments.length !== 3) throw 'callBrowsers from the server expects 2 or 3 arguments: "player", "name", and optional "args"';
+            if(arguments.length !== 2 && arguments.length !== 3) return Promise.reject('callBrowsers from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
             break;
         case "cef":
-            if(arguments.length !== 1 && arguments.length !== 2) throw 'callBrowsers from the browser expects 1 or 2 arguments: "name" and optional "args"';
+            if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('callBrowsers from the browser expects 1 or 2 arguments: "name" and optional "args"');
             break;
     }
     return callBrowsers(player, name, args, {});
@@ -337,8 +349,8 @@ rpc.callBrowsers = async function(player, name, args){
  * @returns {Promise} - The result from the procedure.
  */
 rpc.callBrowser = function(browser, name, args){
-    if(environment !== "client") throw 'callBrowser can only be used in the client environment';
-    if(arguments.length !== 2 || arguments.length !== 3) throw 'callBrowser expects 2 or 3 arguments: "browser", "name", and optional "args"';
+    if(environment !== "client") return Promise.reject('callBrowser can only be used in the client environment');
+    if(arguments.length !== 2 && arguments.length !== 3) return Promise.reject('callBrowser expects 2 or 3 arguments: "browser", "name", and optional "args"');
     const id = util.uid();
     return callBrowser(id, browser, name, args, {});
 };

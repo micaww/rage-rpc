@@ -7,6 +7,7 @@ module.exports = {
         path: path.resolve(__dirname, 'dist'),
         filename: 'rage-rpc.min.js',
         library: 'rpc',
-        libraryTarget: 'umd'
+        libraryTarget: 'umd',
+        globalObject: "typeof self !== 'undefined' ? self : this"
     }
 };

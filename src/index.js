@@ -35,7 +35,7 @@ const processEvent = (...args) => {
     if(data.req){ // someone is trying to remotely call a procedure
         const info = {
             id: data.id,
-            environment: data.env
+            environment: data.fenv || data.env
         };
         if(environment === "server") info.player = args[0];
         const promise = callProcedure(data.name, data.args, info);
@@ -142,13 +142,7 @@ rpc.unregister = (name) => {
  */
 rpc.call = (name, args) => callProcedure(name, args, { environment });
 
-/**
- * Calls a remote procedure registered on the server.
- * @param {string} name - The name of the registered procedure.
- * @param args - Any parameters for the procedure.
- * @returns {Promise} - The result from the procedure.
- */
-rpc.callServer = (name, args) => {
+function callServer(name, args, extraData){
     switch(environment){
         case "server": {
             return rpc.call(name, args);
@@ -165,28 +159,25 @@ rpc.callServer = (name, args) => {
                     id,
                     name,
                     env: environment,
-                    args
+                    args,
+                    ...extraData
                 }));
             });
         }
         case "cef": {
-            /*const id = util.uid();
-            return new Promise((resolve, reject) => {
-                pending[id] = {
-                    resolve,
-                    reject
-                };
-                mp.trigger(PROCESS_EVENT, util.stringifyData({
-                    req: 1,
-                    id,
-                    name,
-                    env: environment,
-                    args,
-                    thru: 1
-                }));
-            });*/
+            return rpc.callClient('__rpc:callServer', [name, args]);
         }
     }
+}
+
+/**
+ * Calls a remote procedure registered on the server.
+ * @param {string} name - The name of the registered procedure.
+ * @param args - Any parameters for the procedure.
+ * @returns {Promise} - The result from the procedure.
+ */
+rpc.callServer = (name, args) => {
+    return callServer(name, args, {});
 };
 
 /**
@@ -300,5 +291,14 @@ rpc.callBrowser = async (name, args) => {
     }
     return Promise.reject('PROCEDURE_NOT_FOUND');
 };
+
+// set up internal pass-through events
+if(environment === "client"){
+    rpc.register('__rpc:callServer', ([name, args], info) => {
+        return callServer(name, args, {
+            fenv: info.environment
+        });
+    });
+}
 
 module.exports = rpc;

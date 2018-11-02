@@ -221,6 +221,13 @@ rpc.callClient = (player, name, args) => {
         }
         case "cef": {
             const id = util.uid();
+            console.log('CEF IS CALLING THE CLIENT WITH THIS DATA: ', {
+                req: 1,
+                id,
+                name,
+                env: environment,
+                args
+            });
             return new Promise((resolve, reject) => {
                 pending[id] = {
                     resolve,
@@ -238,64 +245,114 @@ rpc.callClient = (player, name, args) => {
     }
 };
 
+function callBrowser(id, browser, name, args, extraData){
+    return new Promise((resolve, reject) => {
+        pending[id] = {
+            resolve,
+            reject
+        };
+        passEventToBrowser(browser, util.stringifyData({
+            req: 1,
+            id,
+            name,
+            env: environment,
+            args,
+            ...extraData
+        }));
+    });
+}
+async function callBrowsers(player, name, args, extraData){
+    switch(environment){
+        case "client": {
+            args = name;
+            name = player;
+            const id = util.uid();
+            const numBrowsers = mp.browsers.length;
+            let browser;
+            for(let i = 0; i < numBrowsers; i++){
+                const b = mp.browsers.at(i);
+                await new Promise(resolve => {
+                    const existsHandler = str => {
+                        const parts = str.split(':');
+                        if(parts[0] === id){
+                            if(+parts[1]){
+                                browser = b;
+                            }
+                        }
+                        mp.events.remove(PROCEDURE_EXISTS, existsHandler);
+                        resolve();
+                    };
+                    mp.events.add(PROCEDURE_EXISTS, existsHandler);
+                    b.execute(`var f = window["${PROCEDURE_EXISTS}"]; mp.trigger("${PROCEDURE_EXISTS}", "${id}:"+((f && f("${name}")) ? 1 : 0));`);
+                });
+                if(browser) break;
+            }
+            if(browser) return callBrowser(id, browser, name, args, extraData);
+            throw 'PROCEDURE_NOT_FOUND';
+        }
+        case "server": {
+            return rpc.callClient(player, '__rpc:callBrowsers', [name, args]);
+        }
+        case "cef": {
+            args = name;
+            name = player;
+            return rpc.callClient('__rpc:callBrowsers', [name, args]);
+        }
+    }
+}
+
 /**
  * Calls a remote procedure registered in any browser context.
+ *
+ * Can be called from any environment.
+ *
+ * @param {object} [player] - The player to call the procedure on.
  * @param {string} name - The name of the registered procedure.
  * @param args - Any parameters for the procedure.
  * @returns {Promise} - The result from the procedure.
  */
-//serverside
-//callBrowser(player, name, args)
-//
-//clientside or cef
-//callBrowser(name, args)
-//
-//clientside
-//callBrowser(browser, name, args)
-rpc.callBrowser = async (name, args) => {
+rpc.callBrowsers = async function(player, name, args){
+    switch(environment){
+        case "client":
+            if(arguments.length !== 1 && arguments.length !== 2) throw 'callBrowsers from the client expects 1 or 2 arguments: "name" and optional "args"';
+            break;
+        case "server":
+            if(arguments.length !== 2 && arguments.length !== 3) throw 'callBrowsers from the server expects 2 or 3 arguments: "player", "name", and optional "args"';
+            break;
+        case "cef":
+            if(arguments.length !== 1 && arguments.length !== 2) throw 'callBrowsers from the browser expects 1 or 2 arguments: "name" and optional "args"';
+            break;
+    }
+    return callBrowsers(player, name, args, {});
+};
+
+/**
+ * Calls a remote procedure registered in a specific browser instance.
+ *
+ * Client-side environment only.
+ *
+ * @param {object} browser - The browser instance.
+ * @param {string} name - The name of the registered procedure.
+ * @param args - Any parameters for the procedure.
+ * @returns {Promise} - The result from the procedure.
+ */
+rpc.callBrowser = function(browser, name, args){
+    if(environment !== "client") throw 'callBrowser can only be used in the client environment';
+    if(arguments.length !== 2 || arguments.length !== 3) throw 'callBrowser expects 2 or 3 arguments: "browser", "name", and optional "args"';
     const id = util.uid();
-    const numBrowsers = mp.browsers.length;
-    let browser;
-    for(let i = 0; i < numBrowsers; i++){
-        const b = mp.browsers.at(i);
-        await new Promise(resolve => {
-            const existsHandler = str => {
-                const parts = str.split(':');
-                if(parts[0] === id){
-                    if(+parts[1]){
-                        browser = b;
-                    }
-                }
-                mp.events.remove(PROCEDURE_EXISTS, existsHandler);
-                resolve();
-            };
-            mp.events.add(PROCEDURE_EXISTS, existsHandler);
-            b.execute(`var f = window["${PROCEDURE_EXISTS}"]; mp.trigger("${PROCEDURE_EXISTS}", "${id}:"+((f && f("${name}")) ? 1 : 0));`);
-        });
-        if(browser) break;
-    }
-    if(browser){
-        return new Promise((resolve, reject) => {
-            pending[id] = {
-                resolve,
-                reject
-            };
-            passEventToBrowser(browser, util.stringifyData({
-                req: 1,
-                id,
-                name,
-                env: environment,
-                args
-            }));
-        });
-    }
-    return Promise.reject('PROCEDURE_NOT_FOUND');
+    return callBrowser(id, browser, name, args, {});
 };
 
 // set up internal pass-through events
 if(environment === "client"){
     rpc.register('__rpc:callServer', ([name, args], info) => {
         return callServer(name, args, {
+            fenv: info.environment
+        });
+    });
+
+    rpc.register('__rpc:callBrowsers', ([name, args], info) => {
+        return callBrowsers(name, args, null, {
             fenv: info.environment
         });
     });

@@ -8,8 +8,118 @@ const ERR_NOT_FOUND = 'PROCEDURE_NOT_FOUND';
 const PROCESS_EVENT = '__rpc:process';
 const PROCEDURE_EXISTS = '__rpc:exists';
 
-const listeners = {};
-const pending = {};
+const glob = environment === "cef" ? window : global;
+
+const init = !glob[PROCESS_EVENT];
+
+if(init){
+    glob.__rpcListeners = {};
+    glob.__rpcPending = {};
+
+    glob[PROCESS_EVENT] = (...args) => {
+        let rawData = args[0];
+        if(environment === "server") rawData = args[1];
+        const data = util.parseData(rawData);
+
+
+        if(data.req){ // someone is trying to remotely call a procedure
+            const info = {
+                id: data.id,
+                environment: data.fenv || data.env
+            };
+            if(environment === "server") info.player = args[0];
+            const promise = callProcedure(data.name, data.args, info);
+            const part = {
+                ret: 1,
+                id: data.id
+            };
+            switch(environment){
+                case "server": {
+                    promise.then(res => {
+                        info.player.call(PROCESS_EVENT, [util.stringifyData({
+                            ...part,
+                            res
+                        })]);
+                    }).catch(err => {
+                        info.player.call(PROCESS_EVENT, [util.stringifyData({
+                            ...part,
+                            err
+                        })]);
+                    });
+                    break;
+                }
+                case "client": {
+                    if(data.env === "server"){
+                        promise.then(res => {
+                            mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
+                                ...part,
+                                res
+                            }));
+                        }).catch(err => {
+                            mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
+                                ...part,
+                                err
+                            }));
+                        });
+                    }else if(data.env === "cef"){
+                        promise.then(res => {
+                            passEventToBrowsers({
+                                ...part,
+                                res
+                            });
+                        }).catch(err => {
+                            passEventToBrowsers({
+                                ...part,
+                                err
+                            });
+                        });
+                    }
+                    break;
+                }
+                case "cef": {
+                    promise.then(res => {
+                        mp.trigger(PROCESS_EVENT, util.stringifyData({
+                            ...part,
+                            res
+                        }));
+                    }).catch(err => {
+                        mp.trigger(PROCESS_EVENT, util.stringifyData({
+                            ...part,
+                            err
+                        }));
+                    });
+                }
+            }
+        }else if(data.ret){ // a previously called remote procedure has returned
+            const info = glob.__rpcPending[data.id];
+            if(info){
+                if(data.err) info.reject(data.err);
+                else info.resolve(data.res);
+                glob.__rpcPending[data.id] = undefined;
+            }
+        }
+    };
+
+    if(environment === "cef"){
+        window[PROCEDURE_EXISTS] = name => !!glob.__rpcListeners[name];
+    }else{
+        mp.events.add(PROCESS_EVENT, glob[PROCESS_EVENT]);
+
+        if(environment === "client"){
+            // set up internal pass-through events
+            register('__rpc:callServer', ([name, args], info) => {
+                return _callServer(name, args, {
+                    fenv: info.environment
+                });
+            });
+            register('__rpc:callBrowsers', ([name, args], info) => {
+                return _callBrowsers(name, args, null, {
+                    fenv: info.environment
+                });
+            });
+        }
+    }
+}
 
 let passEventToBrowser, passEventToBrowsers;
 if(environment === "client"){
@@ -24,98 +134,9 @@ if(environment === "client"){
 }
 
 async function callProcedure(name, args, info){
-    if(!listeners[name]) throw ERR_NOT_FOUND;
-    return listeners[name](args, info);
-}
-
-const processEvent = (...args) => {
-    let rawData = args[0];
-    if(environment === "server") rawData = args[1];
-    const data = util.parseData(rawData);
-
-    if(data.req){ // someone is trying to remotely call a procedure
-        const info = {
-            id: data.id,
-            environment: data.fenv || data.env
-        };
-        if(environment === "server") info.player = args[0];
-        const promise = callProcedure(data.name, data.args, info);
-        const part = {
-            ret: 1,
-            id: data.id
-        };
-        switch(environment){
-            case "server": {
-                promise.then(res => {
-                    info.player.call(PROCESS_EVENT, [util.stringifyData({
-                        ...part,
-                        res
-                    })]);
-                }).catch(err => {
-                    info.player.call(PROCESS_EVENT, [util.stringifyData({
-                        ...part,
-                        err
-                    })]);
-                });
-                break;
-            }
-            case "client": {
-                if(data.env === "server"){
-                    promise.then(res => {
-                        mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
-                            ...part,
-                            res
-                        }));
-                    }).catch(err => {
-                        mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
-                            ...part,
-                            err
-                        }));
-                    });
-                }else if(data.env === "cef"){
-                    promise.then(res => {
-                        passEventToBrowsers({
-                            ...part,
-                            res
-                        });
-                    }).catch(err => {
-                        passEventToBrowsers({
-                            ...part,
-                            err
-                        });
-                    });
-                }
-                break;
-            }
-            case "cef": {
-                promise.then(res => {
-                    mp.trigger(PROCESS_EVENT, util.stringifyData({
-                        ...part,
-                        res
-                    }));
-                }).catch(err => {
-                    mp.trigger(PROCESS_EVENT, util.stringifyData({
-                        ...part,
-                        err
-                    }));
-                });
-            }
-        }
-    }else if(data.ret){ // a previously called remote procedure has returned
-        const info = pending[data.id];
-        if(info){
-            if(data.err) info.reject(data.err);
-            else info.resolve(data.res);
-            pending[data.id] = undefined;
-        }
-    }
-};
-
-if(environment === "cef"){
-    window[PROCESS_EVENT] = processEvent;
-    window[PROCEDURE_EXISTS] = name => !!listeners[name];
-}else{
-    mp.events.add(PROCESS_EVENT, processEvent);
+    const listener = glob.__rpcListeners[name];
+    if(!listener) throw ERR_NOT_FOUND;
+    return listener(args, info);
 }
 
 /**
@@ -125,7 +146,7 @@ if(environment === "cef"){
  */
 export function register(name, cb){
     if(arguments.length !== 2) throw 'register expects 2 arguments: "name" and "cb"';
-    listeners[name] = cb;
+    glob.__rpcListeners[name] = cb;
 }
 
 /**
@@ -134,7 +155,7 @@ export function register(name, cb){
  */
 export function unregister(name){
     if(arguments.length !== 1) throw 'unregister expects 1 argument: "name"';
-    listeners[name] = undefined;
+    glob.__rpcListeners[name] = undefined;
 }
 
 /**
@@ -159,7 +180,7 @@ function _callServer(name, args, extraData){
         case "client": {
             const id = util.uid();
             return new Promise((resolve, reject) => {
-                pending[id] = {
+                glob.__rpcPending[id] = {
                     resolve,
                     reject
                 };
@@ -220,7 +241,7 @@ export function callClient(player, name, args){
             if((arguments.length !== 2 && arguments.length !== 3) || typeof player !== "object") return Promise.reject('callClient from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
             const id = util.uid();
             return new Promise((resolve, reject) => {
-                pending[id] = {
+                glob.__rpcPending[id] = {
                     resolve,
                     reject
                 };
@@ -239,7 +260,7 @@ export function callClient(player, name, args){
             if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return Promise.reject('callClient from the browser expects 1 or 2 arguments: "name" and optional "args"');
             const id = util.uid();
             return new Promise((resolve, reject) => {
-                pending[id] = {
+                glob.__rpcPending[id] = {
                     resolve,
                     reject
                 };
@@ -257,7 +278,7 @@ export function callClient(player, name, args){
 
 function _callBrowser(id, browser, name, args, extraData){
     return new Promise((resolve, reject) => {
-        pending[id] = {
+        glob.__rpcPending[id] = {
             resolve,
             reject
         };
@@ -351,18 +372,4 @@ export function callBrowser(browser, name, args){
     if(arguments.length !== 2 && arguments.length !== 3) return Promise.reject('callBrowser expects 2 or 3 arguments: "browser", "name", and optional "args"');
     const id = util.uid();
     return _callBrowser(id, browser, name, args, {});
-}
-
-// set up internal pass-through events
-if(environment === "client"){
-    register('__rpc:callServer', ([name, args], info) => {
-        return _callServer(name, args, {
-            fenv: info.environment
-        });
-    });
-    register('__rpc:callBrowsers', ([name, args], info) => {
-        return _callBrowsers(name, args, null, {
-            fenv: info.environment
-        });
-    });
 }

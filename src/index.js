@@ -10,9 +10,7 @@ const PROCEDURE_EXISTS = '__rpc:exists';
 
 const glob = environment === "cef" ? window : global;
 
-const init = !glob[PROCESS_EVENT];
-
-if(init){
+if(!glob[PROCESS_EVENT]){
     glob.__rpcListeners = {};
     glob.__rpcPending = {};
 
@@ -20,7 +18,6 @@ if(init){
         let rawData = args[0];
         if(environment === "server") rawData = args[1];
         const data = util.parseData(rawData);
-
 
         if(data.req){ // someone is trying to remotely call a procedure
             const info = {
@@ -31,7 +28,8 @@ if(init){
             const promise = callProcedure(data.name, data.args, info);
             const part = {
                 ret: 1,
-                id: data.id
+                id: data.id,
+                env: environment
             };
             switch(environment){
                 case "server": {
@@ -66,12 +64,12 @@ if(init){
                             passEventToBrowsers({
                                 ...part,
                                 res
-                            });
+                            }, true);
                         }).catch(err => {
                             passEventToBrowsers({
                                 ...part,
                                 err
-                            });
+                            }, true);
                         });
                     }
                     break;
@@ -92,6 +90,7 @@ if(init){
             }
         }else if(data.ret){ // a previously called remote procedure has returned
             const info = glob.__rpcPending[data.id];
+            if(environment === "server" && info.player !== args[0]) return;
             if(info){
                 if(data.err) info.reject(data.err);
                 else info.resolve(data.res);
@@ -123,13 +122,13 @@ if(init){
 
 let passEventToBrowser, passEventToBrowsers;
 if(environment === "client"){
-    passEventToBrowser = (browser, data) => {
+    passEventToBrowser = (browser, data, ignore) => {
         const raw = util.stringifyData(data);
-        browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process('${raw}'); }else{ mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}"}'); }`);
+        browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process('${raw}'); }else{ ${ignore ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}","env":"cef"}');`} }`);
     };
 
-    passEventToBrowsers = (data) => {
-        mp.browsers.forEach(browser => passEventToBrowser(browser, data));
+    passEventToBrowsers = (data, ignore) => {
+        mp.browsers.forEach(browser => passEventToBrowser(browser, data, ignore));
     };
 }
 
@@ -243,7 +242,8 @@ export function callClient(player, name, args){
             return new Promise((resolve, reject) => {
                 glob.__rpcPending[id] = {
                     resolve,
-                    reject
+                    reject,
+                    player
                 };
                 player.call(PROCESS_EVENT, [util.stringifyData({
                     req: 1,
@@ -289,7 +289,7 @@ function _callBrowser(id, browser, name, args, extraData){
             env: environment,
             args,
             ...extraData
-        });
+        }, false);
     });
 }
 async function _callBrowsers(player, name, args, extraData){

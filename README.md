@@ -18,6 +18,7 @@
     * [CEF or Client-side](#cef-or-client-side)
         * [callBrowsers(name, args)](#callbrowsersname-args)
         * [callClient(name, args)](#callclientname-args)
+* [Changelog](#changelog)
 
 ## Motivation
 
@@ -431,3 +432,19 @@ rpc.callClient('toggleChat', false);
 ```
 
 ###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+## Changelog
+
+#### 0.0.3
+
+* FIX: Bug that prevented multiple resources from using RPC at the same time
+* FIX: False alarm for multiple CEF instances receiving the same result
+* ADD: Extra player verification for outgoing server calls
+
+#### 0.0.2
+
+* FIX: UMD exposing for correct Node.js importing
+
+#### 0.0.1
+
+* Initial commit

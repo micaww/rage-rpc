@@ -19,3 +19,10 @@ export function stringifyData(data: any): string {
 export function parseData(data: string): any {
     return JSON.parse(data);
 }
+
+export function isBrowserValid(browser: Browser): boolean {
+    try {
+        browser.url;
+    }catch(e){ return false; }
+    return true;
+}

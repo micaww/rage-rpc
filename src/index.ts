@@ -5,6 +5,7 @@ if(!environment) throw 'Unknown RAGE environment';
 
 const ERR_NOT_FOUND = 'PROCEDURE_NOT_FOUND';
 
+const IDENTIFIER = '__rpc:id';
 const PROCESS_EVENT = '__rpc:process';
 const PROCEDURE_EXISTS = '__rpc:exists';
 
@@ -30,63 +31,25 @@ if(!glob[PROCESS_EVENT]){
                 id: data.id,
                 env: environment
             };
+            let ret: (ev: Event) => void;
             switch(environment){
-                case "server": {
-                    promise.then(res => {
-                        info.player.call(PROCESS_EVENT, [util.stringifyData({
-                            ...part,
-                            res
-                        })]);
-                    }).catch(err => {
-                        info.player.call(PROCESS_EVENT, [util.stringifyData({
-                            ...part,
-                            err
-                        })]);
-                    });
+                case "server":
+                    ret = ev => info.player.call(PROCESS_EVENT, [util.stringifyData(ev)]);
                     break;
-                }
                 case "client": {
                     if(data.env === "server"){
-                        promise.then(res => {
-                            mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
-                                ...part,
-                                res
-                            }));
-                        }).catch(err => {
-                            mp.events.callRemote(PROCESS_EVENT, util.stringifyData({
-                                ...part,
-                                err
-                            }));
-                        });
+                        ret = ev => mp.events.callRemote(PROCESS_EVENT, util.stringifyData(ev));
                     }else if(data.env === "cef"){
-                        promise.then(res => {
-                            passEventToBrowsers({
-                                ...part,
-                                res
-                            }, true);
-                        }).catch(err => {
-                            passEventToBrowsers({
-                                ...part,
-                                err
-                            }, true);
-                        });
+                        const browser = data.b && glob.__rpcBrowsers[data.b];
+                        ret = ev => browser && util.isBrowserValid(browser) && passEventToBrowser(browser, ev, true);
                     }
                     break;
                 }
                 case "cef": {
-                    promise.then(res => {
-                        mp.trigger(PROCESS_EVENT, util.stringifyData({
-                            ...part,
-                            res
-                        }));
-                    }).catch(err => {
-                        mp.trigger(PROCESS_EVENT, util.stringifyData({
-                            ...part,
-                            err
-                        }));
-                    });
+                    ret = ev => mp.trigger(PROCESS_EVENT, util.stringifyData(ev));
                 }
             }
+            if(ret) promise.then(res => ret({ ...part, res })).catch(err => ret({ ...part, err }));
         }else if(data.ret){ // a previously called remote procedure has returned
             const info = glob.__rpcPending[data.id];
             if(environment === "server" && info.player !== player) return;
@@ -115,6 +78,19 @@ if(!glob[PROCESS_EVENT]){
                     fenv: info.environment
                 });
             });
+
+            glob.__rpcBrowsers = {};
+
+            const initBrowser = (browser: Browser): void => {
+                const id = util.uid();
+                Object.keys(glob.__rpcBrowsers).forEach(key => {
+                    if(glob.__rpcBrowsers[key] === browser) delete glob.__rpcBrowsers[key];
+                });
+                glob.__rpcBrowsers[id] = browser;
+                browser.execute(`window['${IDENTIFIER}'] = '${id}';`);
+            };
+            mp.browsers.forEach(initBrowser);
+            mp.events.add('browserCreated', initBrowser);
         }
     }
 }
@@ -258,6 +234,7 @@ export function callClient(player: Player | string, name?: string | any, args?: 
                     reject
                 };
                 const event: Event = {
+                    b: glob[IDENTIFIER],
                     req: 1,
                     id,
                     name,

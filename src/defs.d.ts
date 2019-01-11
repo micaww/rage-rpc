@@ -10,6 +10,7 @@ declare interface Player {
 }
 
 declare interface Browser {
+    url: string;
     execute: (code: string) => void;
     [property: string]: any;
 }
@@ -23,6 +24,7 @@ declare interface ProcedureListenerInfo {
 declare interface Event {
     req?: number;
     ret?: number;
+    b?: string;
     id: string;
     name?: string;
     args?: any;

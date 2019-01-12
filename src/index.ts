@@ -7,7 +7,8 @@ const ERR_NOT_FOUND = 'PROCEDURE_NOT_FOUND';
 
 const IDENTIFIER = '__rpc:id';
 const PROCESS_EVENT = '__rpc:process';
-const PROCEDURE_EXISTS = '__rpc:exists';
+const BROWSER_REGISTER = '__rpc:browserRegister';
+const BROWSER_UNREGISTER = '__rpc:browserUnregister';
 
 const glob = environment === "cef" ? window : global;
 
@@ -56,14 +57,12 @@ if(!glob[PROCESS_EVENT]){
             if(info){
                 if(data.err) info.reject(data.err);
                 else info.resolve(data.res);
-                glob.__rpcPending[data.id] = undefined;
+                delete glob.__rpcPending[data.id];
             }
         }
     };
 
-    if(environment === "cef"){
-        window[PROCEDURE_EXISTS] = (name: string) => !!glob.__rpcListeners[name];
-    }else{
+    if(environment !== "cef"){
         mp.events.add(PROCESS_EVENT, glob[PROCESS_EVENT]);
 
         if(environment === "client"){
@@ -74,34 +73,48 @@ if(!glob[PROCESS_EVENT]){
                 });
             });
             register('__rpc:callBrowsers', ([name, args], info) => {
-                return _callBrowsers(name, args, null, {
+                return _callBrowsers(null, name, args, {
                     fenv: info.environment
                 });
             });
 
+            // set up browser identifiers
             glob.__rpcBrowsers = {};
-
             const initBrowser = (browser: Browser): void => {
                 const id = util.uid();
                 Object.keys(glob.__rpcBrowsers).forEach(key => {
-                    if(glob.__rpcBrowsers[key] === browser) delete glob.__rpcBrowsers[key];
+                    const b = glob.__rpcBrowsers[key];
+                    if(!b || !util.isBrowserValid(b) || b === browser) delete glob.__rpcBrowsers[key];
                 });
                 glob.__rpcBrowsers[id] = browser;
-                browser.execute(`window['${IDENTIFIER}'] = '${id}';`);
+                browser.execute(`if(typeof window['${IDENTIFIER}'] === 'undefined'){ window['${IDENTIFIER}'] = Promise.resolve('${id}'); }else{ window['${IDENTIFIER}:resolve']('${id}'); }`);
             };
             mp.browsers.forEach(initBrowser);
             mp.events.add('browserCreated', initBrowser);
+
+            // set up browser registration map
+            glob.__rpcBrowserProcedures = {};
+            mp.events.add(BROWSER_REGISTER, (data: string) => {
+                const [browserId, name] = JSON.parse(data);
+                glob.__rpcBrowserProcedures[name] = browserId;
+            });
+            mp.events.add(BROWSER_UNREGISTER, (data: string) => {
+                const [browserId, name] = JSON.parse(data);
+                if(glob.__rpcBrowserProcedures[name] === browserId) delete glob.__rpcBrowserProcedures[name];
+            });
+        }
+    }else{
+        if(typeof glob[IDENTIFIER] === 'undefined'){
+            glob[IDENTIFIER] = new Promise(resolve => {
+                glob[IDENTIFIER+':resolve'] = resolve;
+            });
         }
     }
 }
 
-function passEventToBrowser(browser: Browser, data: Event, ignore: boolean): void {
+function passEventToBrowser(browser: Browser, data: Event, ignoreNotFound: boolean): void {
     const raw = util.stringifyData(data);
-    browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process('${raw}'); }else{ ${ignore ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}","env":"cef"}');`} }`);
-}
-
-function passEventToBrowsers(data: Event, ignore: boolean): void {
-    mp.browsers.forEach((browser: Browser) => passEventToBrowser(browser, data, ignore));
+    browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process('${raw}'); }else{ ${ignoreNotFound ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}","env":"cef"}');`} }`);
 }
 
 async function callProcedure(name: string, args: any, info: ProcedureListenerInfo){
@@ -117,6 +130,7 @@ async function callProcedure(name: string, args: any, info: ProcedureListenerInf
  */
 export function register(name: string, cb: ProcedureListener): void {
     if(arguments.length !== 2) throw 'register expects 2 arguments: "name" and "cb"';
+    if(environment === "cef") glob[IDENTIFIER].then((id: string) => mp.trigger(BROWSER_REGISTER, JSON.stringify([id, name])));
     glob.__rpcListeners[name] = cb;
 }
 
@@ -126,6 +140,7 @@ export function register(name: string, cb: ProcedureListener): void {
  */
 export function unregister(name: string): void {
     if(arguments.length !== 1) throw 'unregister expects 1 argument: "name"';
+    if(environment === "cef") glob[IDENTIFIER].then((id: string) => mp.trigger(BROWSER_UNREGISTER, JSON.stringify([id, name])));
     glob.__rpcListeners[name] = undefined;
 }
 
@@ -228,20 +243,22 @@ export function callClient(player: Player | string, name?: string | any, args?: 
             name = player;
             if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return Promise.reject('callClient from the browser expects 1 or 2 arguments: "name" and optional "args"');
             const id = util.uid();
-            return new Promise((resolve, reject) => {
-                glob.__rpcPending[id] = {
-                    resolve,
-                    reject
-                };
-                const event: Event = {
-                    b: glob[IDENTIFIER],
-                    req: 1,
-                    id,
-                    name,
-                    env: environment,
-                    args
-                };
-                mp.trigger(PROCESS_EVENT, util.stringifyData(event));
+            return glob[IDENTIFIER].then((browserId: string) => {
+                return new Promise((resolve, reject) => {
+                    glob.__rpcPending[id] = {
+                        resolve,
+                        reject
+                    };
+                    const event: Event = {
+                        b: browserId,
+                        req: 1,
+                        id,
+                        name,
+                        env: environment,
+                        args
+                    };
+                    mp.trigger(PROCESS_EVENT, util.stringifyData(event));
+                });
             });
         }
     }
@@ -266,37 +283,17 @@ function _callBrowser(id: string, browser: Browser, name: string, args?: any, ex
 
 async function _callBrowsers(player: Player, name: string, args?: any, extraData = {}): Promise<any> {
     switch(environment){
-        case "client": {
+        case "client":
             const id = util.uid();
-            const numBrowsers = mp.browsers.length;
-            let browser;
-            for(let i = 0; i < numBrowsers; i++){
-                const b = mp.browsers.at(i);
-                await new Promise(resolve => {
-                    const existsHandler = (str: string) => {
-                        const parts = str.split(':');
-                        if(parts[0] === id){
-                            if(+parts[1]){
-                                browser = b;
-                            }
-                        }
-                        mp.events.remove(PROCEDURE_EXISTS, existsHandler);
-                        resolve();
-                    };
-                    mp.events.add(PROCEDURE_EXISTS, existsHandler);
-                    b.execute(`var f = window["${PROCEDURE_EXISTS}"]; mp.trigger("${PROCEDURE_EXISTS}", "${id}:"+((f && f("${name}")) ? 1 : 0));`);
-                });
-                if(browser) break;
-            }
-            if(browser) return _callBrowser(id, browser, name, args, extraData);
-            throw ERR_NOT_FOUND;
-        }
-        case "server": {
+            const browserId = glob.__rpcBrowserProcedures[name];
+            if(!browserId) throw ERR_NOT_FOUND;
+            const browser = glob.__rpcBrowsers[browserId];
+            if(!browser || !util.isBrowserValid(browser)) throw ERR_NOT_FOUND;
+            return _callBrowser(id, browser, name, args, extraData);
+        case "server":
             return callClient(player, '__rpc:callBrowsers', [name, args]);
-        }
-        case "cef": {
+        case "cef":
             return callClient('__rpc:callBrowsers', [name, args]);
-        }
     }
 }
 
@@ -315,7 +312,7 @@ export function callBrowsers(player: Player | string, name?: string | any, args?
         case "client":
         case "cef":
             if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('callBrowsers from the client or browser expects 1 or 2 arguments: "name" and optional "args"');
-            return _callBrowsers(undefined, player as string, name, {});
+            return _callBrowsers(null, player as string, name, {});
         case "server":
             if(arguments.length !== 2 && arguments.length !== 3) return Promise.reject('callBrowsers from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
             return _callBrowsers(player as Player, name, args, {});

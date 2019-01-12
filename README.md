@@ -435,11 +435,18 @@ rpc.callClient('toggleChat', false);
 
 ## Changelog
 
+#### 0.1.0
+
+* ADD: Bundled Typescript definitions
+* IMPROVE: CEF outgoing call returning performance
+* IMRPOVE: `callBrowsers` performance on all contexts
+* FIX: Some code simplifications
+
 #### 0.0.3
 
+* ADD: Extra player verification for outgoing server calls
 * FIX: Bug that prevented multiple resources from using RPC at the same time
 * FIX: False alarm for multiple CEF instances receiving the same result
-* ADD: Extra player verification for outgoing server calls
 
 #### 0.0.2
 

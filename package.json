@@ -1,6 +1,6 @@
 {
   "name": "rage-rpc",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "An asynchronous RPC implementation for RAGE Multiplayer",
   "main": "dist/rage-rpc.min.js",
   "types": "dist/rage-rpc.d.ts",

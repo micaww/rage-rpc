@@ -20,6 +20,14 @@ export function parseData(data: string): any {
     return JSON.parse(data);
 }
 
+export function promiseResolve(result: any): Promise<any> {
+    return new Promise(resolve => setTimeout(() => resolve(result), 0));
+}
+
+export function promiseReject(error: any): Promise<any> {
+    return new Promise((_, reject) => setTimeout(() => reject(error), 0));
+}
+
 export function isBrowserValid(browser: Browser): boolean {
     try {
         browser.url;

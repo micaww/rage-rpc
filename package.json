@@ -5,6 +5,7 @@
   "main": "dist/rage-rpc.min.js",
   "types": "dist/rage-rpc.d.ts",
   "scripts": {
+    "watch": "webpack-cli --config ./webpack.config.js --watch",
     "build": "webpack-cli --config ./webpack.config.js",
     "type-check": "tsc"
   },
@@ -24,12 +25,12 @@
   "dependencies": {},
   "devDependencies": {
     "@babel/core": "^7.2.2",
-    "@babel/preset-env": "^7.2.3",
+    "@babel/preset-env": "^7.3.1",
     "@babel/preset-typescript": "^7.1.0",
     "babel-loader": "^8.0.5",
     "replace-in-file-webpack-plugin": "^1.0.6",
-    "typescript": "^3.2.2",
-    "webpack": "^4.23.1",
-    "webpack-cli": "^3.1.2"
+    "typescript": "^3.3.3",
+    "webpack": "^4.29.3",
+    "webpack-cli": "^3.2.3"
   }
 }

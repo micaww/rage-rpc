@@ -32,6 +32,9 @@ module.exports = {
             rules: [{
                 search: `exports.${LIBRARY_NAME}`,
                 replace: 'exports'
+            }, {
+                search: `exports["${LIBRARY_NAME}"]`,
+                replace: 'exports'
             }]
         }])
     ]

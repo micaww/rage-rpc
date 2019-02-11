@@ -55,8 +55,7 @@ if(!glob[PROCESS_EVENT]){
             const info = glob.__rpcPending[data.id];
             if(environment === "server" && info.player !== player) return;
             if(info){
-                if(data.err) info.reject(data.err);
-                else info.resolve(data.res);
+                info.resolve(data.err ? util.promiseReject(data.err) : util.promiseResolve(data.res));
                 delete glob.__rpcPending[data.id];
             }
         }
@@ -117,10 +116,10 @@ function passEventToBrowser(browser: Browser, data: Event, ignoreNotFound: boole
     browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process('${raw}'); }else{ ${ignoreNotFound ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}","env":"cef"}');`} }`);
 }
 
-async function callProcedure(name: string, args: any, info: ProcedureListenerInfo){
+function callProcedure(name: string, args: any, info: ProcedureListenerInfo): Promise<any> {
     const listener = glob.__rpcListeners[name];
-    if(!listener) throw ERR_NOT_FOUND;
-    return listener(args, info);
+    if(!listener) return util.promiseReject(ERR_NOT_FOUND);
+    return util.promiseResolve(listener(args, info));
 }
 
 /**
@@ -154,7 +153,7 @@ export function unregister(name: string): void {
  * @returns The result from the procedure.
  */
 export function call(name: string, args?: any): Promise<any> {
-    if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('call expects 1 or 2 arguments: "name" and optional "args"');
+    if(arguments.length !== 1 && arguments.length !== 2) return util.promiseReject('call expects 1 or 2 arguments: "name" and optional "args"');
     return callProcedure(name, args, { environment });
 }
 
@@ -165,10 +164,9 @@ function _callServer(name: string, args?: any, extraData = {}): Promise<any> {
         }
         case "client": {
             const id = util.uid();
-            return new Promise((resolve, reject) => {
+            return new Promise(resolve => {
                 glob.__rpcPending[id] = {
-                    resolve,
-                    reject
+                    resolve
                 };
                 const event: Event = {
                     req: 1,
@@ -197,7 +195,7 @@ function _callServer(name: string, args?: any, extraData = {}): Promise<any> {
  * @returns The result from the procedure.
  */
 export function callServer(name: string, args?: any): Promise<any> {
-    if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('callServer expects 1 or 2 arguments: "name" and optional "args"');
+    if(arguments.length !== 1 && arguments.length !== 2) return util.promiseReject('callServer expects 1 or 2 arguments: "name" and optional "args"');
     return _callServer(name, args, {});
 }
 
@@ -216,16 +214,15 @@ export function callClient(player: Player | string, name?: string | any, args?: 
         case "client": {
             args = name;
             name = player;
-            if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return Promise.reject('callClient from the client expects 1 or 2 arguments: "name" and optional "args"');
+            if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return util.promiseReject('callClient from the client expects 1 or 2 arguments: "name" and optional "args"');
             return call(name, args);
         }
         case "server": {
-            if((arguments.length !== 2 && arguments.length !== 3) || typeof player !== "object") return Promise.reject('callClient from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
+            if((arguments.length !== 2 && arguments.length !== 3) || typeof player !== "object") return util.promiseReject('callClient from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
             const id = util.uid();
-            return new Promise((resolve, reject) => {
+            return new Promise(resolve => {
                 glob.__rpcPending[id] = {
                     resolve,
-                    reject,
                     player
                 };
                 const event: Event = {
@@ -241,13 +238,12 @@ export function callClient(player: Player | string, name?: string | any, args?: 
         case "cef": {
             args = name;
             name = player;
-            if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return Promise.reject('callClient from the browser expects 1 or 2 arguments: "name" and optional "args"');
+            if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string") return util.promiseReject('callClient from the browser expects 1 or 2 arguments: "name" and optional "args"');
             const id = util.uid();
             return glob[IDENTIFIER].then((browserId: string) => {
-                return new Promise((resolve, reject) => {
+                return new Promise(resolve => {
                     glob.__rpcPending[id] = {
-                        resolve,
-                        reject
+                        resolve
                     };
                     const event: Event = {
                         b: browserId,
@@ -264,11 +260,10 @@ export function callClient(player: Player | string, name?: string | any, args?: 
     }
 }
 
-function _callBrowser(id: string, browser: Browser, name: string, args?: any, extraData = {}){
-    return new Promise((resolve, reject) => {
+function _callBrowser(id: string, browser: Browser, name: string, args?: any, extraData = {}): Promise<any> {
+    return new Promise(resolve => {
         glob.__rpcPending[id] = {
-            resolve,
-            reject
+            resolve
         };
         passEventToBrowser(browser, {
             req: 1,
@@ -281,14 +276,14 @@ function _callBrowser(id: string, browser: Browser, name: string, args?: any, ex
     });
 }
 
-async function _callBrowsers(player: Player, name: string, args?: any, extraData = {}): Promise<any> {
+function _callBrowsers(player: Player, name: string, args?: any, extraData = {}): Promise<any> {
     switch(environment){
         case "client":
             const id = util.uid();
             const browserId = glob.__rpcBrowserProcedures[name];
-            if(!browserId) throw ERR_NOT_FOUND;
+            if(!browserId) return util.promiseReject(ERR_NOT_FOUND);
             const browser = glob.__rpcBrowsers[browserId];
-            if(!browser || !util.isBrowserValid(browser)) throw ERR_NOT_FOUND;
+            if(!browser || !util.isBrowserValid(browser)) return util.promiseReject(ERR_NOT_FOUND);
             return _callBrowser(id, browser, name, args, extraData);
         case "server":
             return callClient(player, '__rpc:callBrowsers', [name, args]);
@@ -311,10 +306,10 @@ export function callBrowsers(player: Player | string, name?: string | any, args?
     switch(environment){
         case "client":
         case "cef":
-            if(arguments.length !== 1 && arguments.length !== 2) return Promise.reject('callBrowsers from the client or browser expects 1 or 2 arguments: "name" and optional "args"');
+            if(arguments.length !== 1 && arguments.length !== 2) return util.promiseReject('callBrowsers from the client or browser expects 1 or 2 arguments: "name" and optional "args"');
             return _callBrowsers(null, player as string, name, {});
         case "server":
-            if(arguments.length !== 2 && arguments.length !== 3) return Promise.reject('callBrowsers from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
+            if(arguments.length !== 2 && arguments.length !== 3) return util.promiseReject('callBrowsers from the server expects 2 or 3 arguments: "player", "name", and optional "args"');
             return _callBrowsers(player as Player, name, args, {});
     }
 }
@@ -330,8 +325,8 @@ export function callBrowsers(player: Player | string, name?: string | any, args?
  * @returns The result from the procedure.
  */
 export function callBrowser(browser: Browser, name: string, args?: any): Promise<any> {
-    if(environment !== 'client') return Promise.reject('callBrowser can only be used in the client environment');
-    if(arguments.length !== 2 && arguments.length !== 3) return Promise.reject('callBrowser expects 2 or 3 arguments: "browser", "name", and optional "args"');
+    if(environment !== 'client') return util.promiseReject('callBrowser can only be used in the client environment');
+    if(arguments.length !== 2 && arguments.length !== 3) return util.promiseReject('callBrowser expects 2 or 3 arguments: "browser", "name", and optional "args"');
     const id = util.uid();
     return _callBrowser(id, browser, name, args, {});
 }

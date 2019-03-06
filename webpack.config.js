@@ -4,9 +4,9 @@ const ReplaceInFileWebpackPlugin = require('replace-in-file-webpack-plugin');
 const LIBRARY_NAME = 'rpc';
 const OUTPUT_FILE = 'rage-rpc.min.js';
 
-module.exports = {
+module.exports = mode => ({
     entry: './src/index.ts',
-    mode: 'production',
+    mode,
     module: {
         rules: [
             {
@@ -38,4 +38,4 @@ module.exports = {
             }]
         }])
     ]
-};
+});

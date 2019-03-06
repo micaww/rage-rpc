@@ -5,8 +5,8 @@
   "main": "dist/rage-rpc.min.js",
   "types": "dist/rage-rpc.d.ts",
   "scripts": {
-    "watch": "webpack-cli --config ./webpack.config.js --watch",
-    "build": "webpack-cli --config ./webpack.config.js",
+    "watch": "webpack-cli --config ./webpack.config.js --mode=development --watch",
+    "build": "webpack-cli --config ./webpack.config.js --mode=production",
     "type-check": "tsc"
   },
   "files": [

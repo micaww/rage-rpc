@@ -26,7 +26,6 @@ if(!glob[PROCESS_EVENT]){
                 environment: data.fenv || data.env
             };
             if(environment === "server") info.player = player as Player;
-            const promise = callProcedure(data.name, data.args, info);
             const part = {
                 ret: 1,
                 id: data.id,
@@ -42,6 +41,7 @@ if(!glob[PROCESS_EVENT]){
                         ret = ev => mp.events.callRemote(PROCESS_EVENT, util.stringifyData(ev));
                     }else if(data.env === "cef"){
                         const browser = data.b && glob.__rpcBrowsers[data.b];
+                        info.browser = browser;
                         ret = ev => browser && util.isBrowserValid(browser) && passEventToBrowser(browser, ev, true);
                     }
                     break;
@@ -50,7 +50,7 @@ if(!glob[PROCESS_EVENT]){
                     ret = ev => mp.trigger(PROCESS_EVENT, util.stringifyData(ev));
                 }
             }
-            if(ret) promise.then(res => ret({ ...part, res })).catch(err => ret({ ...part, err }));
+            if(ret) callProcedure(data.name, data.args, info).then(res => ret({ ...part, res })).catch(err => ret({ ...part, err }));
         }else if(data.ret){ // a previously called remote procedure has returned
             const info = glob.__rpcPending[data.id];
             if(environment === "server" && info.player !== player) return;

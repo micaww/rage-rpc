@@ -19,6 +19,7 @@ declare interface ProcedureListenerInfo {
     environment: string;
     id?: string;
     player?: Player;
+    browser?: Browser;
 }
 
 declare interface Event {

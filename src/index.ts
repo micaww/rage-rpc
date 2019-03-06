@@ -66,16 +66,8 @@ if(!glob[PROCESS_EVENT]){
 
         if(environment === "client"){
             // set up internal pass-through events
-            register('__rpc:callServer', ([name, args], info) => {
-                return _callServer(name, args, {
-                    fenv: info.environment
-                });
-            });
-            register('__rpc:callBrowsers', ([name, args], info) => {
-                return _callBrowsers(null, name, args, {
-                    fenv: info.environment
-                });
-            });
+            register('__rpc:callServer', ([name, args], info) => _callServer(name, args, { fenv: info.environment }));
+            register('__rpc:callBrowsers', ([name, args], info) => _callBrowsers(null, name, args, { fenv: info.environment }));
 
             // set up browser identifiers
             glob.__rpcBrowsers = {};
@@ -112,7 +104,7 @@ if(!glob[PROCESS_EVENT]){
 }
 
 function passEventToBrowser(browser: Browser, data: Event, ignoreNotFound: boolean): void {
-    const raw = util.stringifyData(data);
+    const raw = util.stringifyData(data).replace(/'/g, "\\'");
     browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process('${raw}'); }else{ ${ignoreNotFound ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}","env":"cef"}');`} }`);
 }
 

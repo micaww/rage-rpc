@@ -10,6 +10,16 @@ export function callBrowsers(player: Player, name: string, args?: any): Promise<
 export function callBrowsers(name: string, args?: any): Promise<any>;
 export function callBrowser(browser: Browser, name: string, args?: any): Promise<any>;
 
+export function on(name: string, cb: EventListener): void;
+export function off(name: string, cb: EventListener): void;
+export function trigger(name: string, args?: any): void;
+export function triggerServer(name: string, args?: any): void;
+export function triggerClient(player: Player, name: string, args?: any): void;
+export function triggerClient(name: string, args?: any): void;
+export function triggerBrowsers(player: Player, name: string, args?: any): void;
+export function triggerBrowsers(name: string, args?: any): void;
+export function triggerBrowser(browser: Browser, name: string, args?: any): void;
+
 export interface Player {
     call: (eventName: string, args?: any[]) => void;
     [property: string]: any;
@@ -27,3 +37,4 @@ export interface ProcedureListenerInfo {
 }
 
 export type ProcedureListener = (args: any, info: ProcedureListenerInfo) => any;
+export type EventListener = ProcedureListener

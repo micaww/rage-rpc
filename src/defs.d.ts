@@ -4,6 +4,8 @@ declare var window: any;
 
 declare type ProcedureListener = (args: any, info: ProcedureListenerInfo) => any;
 
+declare type EventListener = ProcedureListener
+
 declare interface Player {
     call: (eventName: string, args?: any[]) => void;
     [property: string]: any;
@@ -33,4 +35,5 @@ declare interface Event {
     fenv?: string;
     res?: any;
     err?: any;
+    trigger?: boolean;
 }

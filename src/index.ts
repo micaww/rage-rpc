@@ -104,7 +104,7 @@ if(!glob[PROCESS_EVENT]){
 }
 
 function passEventToBrowser(browser: Browser, data: Event, ignoreNotFound: boolean): void {
-    const raw = util.stringifyData(data)
+    const raw = util.stringifyData(data);
     browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process(${JSON.stringify(raw)}); }else{ ${ignoreNotFound ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}","env":"cef"}');`} }`);
 }
 

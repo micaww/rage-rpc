@@ -343,7 +343,6 @@ function triggerEvent(name: string, args: any, info: ProcedureListenerInfo): voi
  */
 export function on(name: string, cb: EventListener): void {
     if(arguments.length !== 2) throw 'on expects 2 arguments: "name" and "cb"';
-    if(environment === "cef") glob[IDENTIFIER].then((id: string) => mp.trigger(BROWSER_REGISTER, JSON.stringify([id, name])));
     if(!glob.__eventListeners[name]) glob.__eventListeners[name] = new Set()
     glob.__eventListeners[name].add(cb);
 }
@@ -355,7 +354,6 @@ export function on(name: string, cb: EventListener): void {
  */
 export function off(name: string, cb: EventListener): void {
     if(arguments.length !== 2) throw 'off expects 2 arguments: "name" and "cb"';
-    if(environment === "cef") glob[IDENTIFIER].then((id: string) => mp.trigger(BROWSER_UNREGISTER, JSON.stringify([id, name])));
     if(!glob.__eventListeners[name]) glob.__eventListeners[name] = new Set()
     glob.__eventListeners[name].delete(cb);
 }
@@ -419,7 +417,7 @@ export function triggerClient(player: Player | string, name?: string | any, args
             if((arguments.length !== 1 && arguments.length !== 2) || typeof name !== "string")
                 throw 'triggerClient from the client expects 1 or 2 arguments: "name" and optional "args"'
 
-            trigger(name, args)
+            trigger(name, args);
         }; break;
 
         case "server": {

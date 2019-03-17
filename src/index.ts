@@ -78,7 +78,14 @@ if(!glob[PROCESS_EVENT]){
                     if(!b || !util.isBrowserValid(b) || b === browser) delete glob.__rpcBrowsers[key];
                 });
                 glob.__rpcBrowsers[id] = browser;
-                browser.execute(`if(typeof window['${IDENTIFIER}'] === 'undefined'){ window['${IDENTIFIER}'] = Promise.resolve('${id}'); }else{ window['${IDENTIFIER}:resolve']('${id}'); }`);
+                browser.execute(`
+                    window.name = '${id}';
+                    if (typeof window['${IDENTIFIER}'] === 'undefined') {
+                        window['${IDENTIFIER}'] = Promise.resolve(window.name);
+                    } else {
+                        window['${IDENTIFIER}:resolve'](window.name);
+                    }
+                `);
             };
             mp.browsers.forEach(initBrowser);
             mp.events.add('browserCreated', initBrowser);
@@ -97,7 +104,11 @@ if(!glob[PROCESS_EVENT]){
     }else{
         if(typeof glob[IDENTIFIER] === 'undefined'){
             glob[IDENTIFIER] = new Promise(resolve => {
-                glob[IDENTIFIER+':resolve'] = resolve;
+                if (window.name) {
+                    resolve(window.name);
+                } else {
+                    glob[IDENTIFIER+':resolve'] = resolve;
+                }
             });
         }
     }

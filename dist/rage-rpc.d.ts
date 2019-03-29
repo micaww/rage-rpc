@@ -2,13 +2,13 @@ export as namespace rpc;
 
 export function register(name: string, cb: ProcedureListener): void;
 export function unregister(name: string): void;
-export function call(name: string, args?: any): Promise<any>;
-export function callServer(name: string, args?: any): Promise<any>;
-export function callClient(player: Player, name: string, args?: any): Promise<any>;
-export function callClient(name: string, args?: any): Promise<any>;
-export function callBrowsers(player: Player, name: string, args?: any): Promise<any>;
-export function callBrowsers(name: string, args?: any): Promise<any>;
-export function callBrowser(browser: Browser, name: string, args?: any): Promise<any>;
+export function call<T = any>(name: string, args?: any): Promise<T>;
+export function callServer<T = any>(name: string, args?: any): Promise<T>;
+export function callClient<T = any>(player: Player, name: string, args?: any): Promise<T>;
+export function callClient<T = any>(name: string, args?: any): Promise<T>;
+export function callBrowsers<T = any>(player: Player, name: string, args?: any): Promise<T>;
+export function callBrowsers<T = any>(name: string, args?: any): Promise<T>;
+export function callBrowser<T = any>(browser: Browser, name: string, args?: any): Promise<T>;
 
 export interface Player {
     call: (eventName: string, args?: any[]) => void;

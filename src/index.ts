@@ -333,3 +333,13 @@ export function callBrowser(browser: Browser, name: string, args?: any): Promise
     const id = util.uid();
     return _callBrowser(id, browser, name, args, {});
 }
+
+export default {
+    register,
+    unregister,
+    call,
+    callServer,
+    callClient,
+    callBrowsers,
+    callBrowser
+};

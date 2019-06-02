@@ -10,14 +10,23 @@
         * [unregister(name)](#unregistername)
         * [call(name, args)](#callname-args)
         * [callServer(name, args)](#callservername-args)
+        * [on(name, callback)](#onname-callback)
+        * [off(name, callback)](#offname-callback)
+        * [trigger(name, args)](#triggername-args)
+        * [triggerServer(name, args)](#triggerservername-args)
     * [Server-side](#server-side-3)
         * [callClient(player, name, args)](#callclientplayer-name-args)
         * [callBrowsers(player, name, args)](#callbrowsersplayer-name-args)
+        * [triggerClient(player, name, args)](#triggerclientplayer-name-args)
+        * [triggerBrowsers(player, name, args)](#triggerbrowsersplayer-name-args)
     * [Client-side](#client-side-2)
         * [callBrowser(browser, name, args)](#callbrowserbrowser-name-args)
+        * [triggerBrowser(browser, name, args)](#triggerbrowserbrowser-name-args)
     * [CEF or Client-side](#cef-or-client-side)
         * [callBrowsers(name, args)](#callbrowsersname-args)
         * [callClient(name, args)](#callclientname-args)
+        * [triggerBrowsers(name, args)](#triggerbrowsersname-args)
+        * [triggerClient(name, args)](#triggerclientname-args)
 * [Changelog](#changelog)
 
 ## Motivation
@@ -432,6 +441,10 @@ rpc.callClient('toggleChat', false);
 ```
 
 ###### Returns [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) resolving or failing due to the procedure's result. If the procedure called does not exist, `PROCEDURE_NOT_FOUND` will be thrown.
+
+## Events
+
+You can now use rage-rpc as a full on replacement for mp.events. API functions that start with "trigger" use the same syntax as the ones that start with "call", except they do not return anything. They call remote events on any context where there can be many handlers or none.
 
 ## Changelog
 

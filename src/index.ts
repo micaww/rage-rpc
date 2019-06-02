@@ -9,12 +9,15 @@ const IDENTIFIER = '__rpc:id';
 const PROCESS_EVENT = '__rpc:process';
 const BROWSER_REGISTER = '__rpc:browserRegister';
 const BROWSER_UNREGISTER = '__rpc:browserUnregister';
+const TRIGGER_EVENT = '__rpc:triggerEvent';
+const TRIGGER_EVENT_BROWSERS = '__rpc:triggerEventBrowsers';
 
-const glob = environment === "cef" ? window : global;
+const glob = environment === 'cef' ? window : global;
 
 if(!glob[PROCESS_EVENT]){
     glob.__rpcListeners = {};
     glob.__rpcPending = {};
+    glob.__rpcEvListeners = {};
 
     glob[PROCESS_EVENT] = (player: Player | string, rawData?: string) => {
         if(environment !== "server") rawData = player as string;
@@ -103,18 +106,26 @@ if(!glob[PROCESS_EVENT]){
                 const [browserId, name] = JSON.parse(data);
                 if(glob.__rpcBrowserProcedures[name] === browserId) delete glob.__rpcBrowserProcedures[name];
             });
+
+            register(TRIGGER_EVENT_BROWSERS, ([name, args], info) => {
+                Object.values(glob.__rpcBrowsers).forEach(browser => {
+                    _callBrowser(browser, TRIGGER_EVENT, [name, args], { fenv: info.environment, noRet: 1 });
+                });
+            });
         }
     }else{
         if(typeof glob[IDENTIFIER] === 'undefined'){
             glob[IDENTIFIER] = new Promise(resolve => {
                 if (window.name) {
                     resolve(window.name);
-                } else {
+                }else{
                     glob[IDENTIFIER+':resolve'] = resolve;
                 }
             });
         }
     }
+
+    register(TRIGGER_EVENT, ([name, args], info) => callEvent(name, args, info));
 }
 
 function passEventToBrowser(browser: Browser, data: Event, ignoreNotFound: boolean): void {
@@ -301,11 +312,12 @@ export function callClient(player: Player | string, name?: string | any, args?: 
     let extraData: any = {};
     if(options.noRet) extraData.noRet = 1;
 
-    return util.promiseTimeout(_callClient(typeof player === 'object' ? player : null, name, args, extraData), options.timeout);
+    return util.promiseTimeout(_callClient(player as Player, name, args, extraData), options.timeout);
 }
 
-function _callBrowser(id: string, browser: Browser, name: string, args?: any, extraData: any = {}): Promise<any> {
+function _callBrowser(browser: Browser, name: string, args?: any, extraData: any = {}): Promise<any> {
     return new Promise(resolve => {
+        const id = util.uid();
         if(!extraData.noRet){
             glob.__rpcPending[id] = {
                 resolve
@@ -325,12 +337,11 @@ function _callBrowser(id: string, browser: Browser, name: string, args?: any, ex
 function _callBrowsers(player: Player, name: string, args?: any, extraData: any = {}): Promise<any> {
     switch(environment){
         case 'client':
-            const id = util.uid();
             const browserId = glob.__rpcBrowserProcedures[name];
             if(!browserId) return util.promiseReject(ERR_NOT_FOUND);
             const browser = glob.__rpcBrowsers[browserId];
             if(!browser || !util.isBrowserValid(browser)) return util.promiseReject(ERR_NOT_FOUND);
-            return _callBrowser(id, browser, name, args, extraData);
+            return _callBrowser(browser, name, args, extraData);
         case 'server':
             return _callClient(player, '__rpc:callBrowsers', [name, args, +extraData.noRet], extraData);
         case 'cef':
@@ -389,12 +400,148 @@ export function callBrowsers(player: Player | string, name?: string | any, args?
 export function callBrowser(browser: Browser, name: string, args?: any, options: CallOptions = {}): Promise<any> {
     if(environment !== 'client') return util.promiseReject('callBrowser can only be used in the client environment');
     if(arguments.length < 2 || arguments.length > 4) return util.promiseReject('callBrowser expects 2 to 4 arguments: "browser", "name", optional "args", and optional "options"');
-    const id = util.uid();
 
     let extraData: any = {};
     if(options.noRet) extraData.noRet = 1;
 
-    return util.promiseTimeout(_callBrowser(id, browser, name, args, extraData), options.timeout);
+    return util.promiseTimeout(_callBrowser(browser, name, args, extraData), options.timeout);
+}
+
+function callEvent(name: string, args: any, info: ProcedureListenerInfo){
+    const listeners = glob.__rpcEvListeners[name];
+    if(listeners){
+        listeners.forEach(listener => listener(args, info));
+    }
+}
+
+/**
+ * Register an event handler.
+ * @param {string} name - The name of the event.
+ * @param cb - The callback for the event.
+ */
+export function on(name: string, cb: ProcedureListener){
+    if(arguments.length !== 2) throw 'on expects 2 arguments: "name" and "cb"';
+
+    const listeners = glob.__rpcEvListeners[name] || new Set();
+    listeners.add(cb);
+    glob.__rpcEvListeners[name] = listeners;
+}
+
+/**
+ * Unregister an event handler.
+ * @param {string} name - The name of the event.
+ * @param cb - The callback for the event.
+ */
+export function off(name: string, cb: ProcedureListener){
+    if(arguments.length !== 2) throw 'off expects 2 arguments: "name" and "cb"';
+
+    const listeners = glob.__rpcEvListeners[name];
+    if(listeners){
+        listeners.delete(cb);
+    }
+}
+
+/**
+ * Triggers a local event. Only events registered in the same context will be triggered.
+ *
+ * Can be called from any environment.
+ *
+ * @param name - The name of the locally registered event.
+ * @param args - Any parameters for the event.
+ */
+export function trigger(name: string, args?: any){
+    if(arguments.length < 1 || arguments.length > 2) throw 'trigger expects 1 or 2 arguments: "name", and optional "args"';
+    callEvent(name, args, { environment });
+}
+
+/**
+ * Triggers an event registered on the client.
+ *
+ * Can be called from any environment.
+ *
+ * @param player - The player to call the procedure on.
+ * @param name - The name of the event.
+ * @param args - Any parameters for the event.
+ */
+export function triggerClient(player: Player | string, name?: string | any, args?: any){
+    switch(environment){
+        case 'client': {
+            args = name;
+            name = player;
+            player = null;
+            if((arguments.length < 1 || arguments.length > 2) || typeof name !== 'string') throw 'triggerClient from the client expects 1 or 2 arguments: "name", and optional "args"';
+            break;
+        }
+        case 'server': {
+            if((arguments.length < 2 || arguments.length > 3) || typeof player !== 'object') throw 'triggerClient from the server expects 2 or 3 arguments: "player", "name", and optional "args"';
+            break;
+        }
+        case 'cef': {
+            args = name;
+            name = player;
+            player = null;
+            if((arguments.length < 1 || arguments.length > 2) || typeof name !== 'string') throw 'triggerClient from the browser expects 1 or 2 arguments: "name", and optional "args"';
+            break;
+        }
+    }
+
+    _callClient(player as Player, TRIGGER_EVENT, [name, args], { noRet: 1 });
+}
+
+/**
+ * Triggers an event registered on the server.
+ *
+ * Can be called from any environment.
+ *
+ * @param name - The name of the event.
+ * @param args - Any parameters for the event.
+ */
+export function triggerServer(name: string, args?: any){
+    if(arguments.length < 1 || arguments.length > 2) throw 'triggerServer expects 1 or 2 arguments: "name", and optional "args"';
+
+    _callServer(TRIGGER_EVENT, [name, args], { noRet: 1 });
+}
+
+/**
+ * Triggers an event registered in any browser context.
+ *
+ * Can be called from any environment.
+ *
+ * @param player - The player to call the procedure on.
+ * @param name - The name of the event.
+ * @param args - Any parameters for the event.
+ */
+export function triggerBrowsers(player: Player | string, name?: string | any, args?: any){
+    switch(environment){
+        case 'client':
+        case 'cef':
+            args = name;
+            name = player;
+            player = null;
+            if(arguments.length < 1 || arguments.length > 2) throw 'triggerBrowsers from the client or browser expects 1 or 2 arguments: "name", and optional "args"';
+            break;
+        case 'server':
+            if(arguments.length < 2 || arguments.length > 3) throw 'triggerBrowsers from the server expects 2 or 3 arguments: "player", "name", and optional "args"';
+            break;
+    }
+
+    _callClient(player as Player, TRIGGER_EVENT_BROWSERS, [name, args], { noRet: 1 });
+}
+
+/**
+ * Triggers an event registered in a specific browser instance.
+ *
+ * Client-side environment only.
+ *
+ * @param browser - The browser instance.
+ * @param name - The name of the event.
+ * @param args - Any parameters for the event.
+ */
+export function triggerBrowser(browser: Browser, name: string, args?: any){
+    if(environment !== 'client') throw 'callBrowser can only be used in the client environment';
+    if(arguments.length < 2 || arguments.length > 4) throw 'callBrowser expects 2 or 3 arguments: "browser", "name", and optional "args"';
+
+    _callBrowser(browser, TRIGGER_EVENT, [name, args], { noRet: 1});
 }
 
 export default {
@@ -404,5 +551,12 @@ export default {
     callServer,
     callClient,
     callBrowsers,
-    callBrowser
+    callBrowser,
+    on,
+    off,
+    trigger,
+    triggerServer,
+    triggerClient,
+    triggerBrowsers,
+    triggerBrowser
 };

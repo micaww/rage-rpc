@@ -60,7 +60,7 @@ export function stringifyData(data: any): string {
 
             if(type) return {
                 __t: type,
-                i: value.remoteId || value.id
+                i: typeof value.remoteId === 'number' ? value.remoteId : value.id
             };
         }
 

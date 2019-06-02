@@ -103,6 +103,17 @@ export function promiseReject(error: any): Promise<any> {
     return new Promise((_, reject) => setTimeout(() => reject(error), 0));
 }
 
+export function promiseTimeout(promise: Promise<any>, timeout?: number){
+    if(typeof timeout === 'number'){
+        return Promise.race([
+            new Promise((_, reject) => {
+                setTimeout(() => reject('TIMEOUT'), timeout);
+            }),
+            promise
+        ]);
+    }else return promise;
+}
+
 export function isBrowserValid(browser: Browser): boolean {
     try {
         browser.url;

@@ -22,6 +22,10 @@ declare interface ProcedureListenerInfo {
     browser?: Browser;
 }
 
+declare interface CallOptions {
+    timeout?: number;
+}
+
 declare interface Event {
     req?: number;
     ret?: number;

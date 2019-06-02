@@ -10,6 +10,16 @@ export function callBrowsers<T = any>(player: Player, name: string, args?: any, 
 export function callBrowsers<T = any>(name: string, args?: any, options: CallOptions = {}): Promise<T>;
 export function callBrowser<T = any>(browser: Browser, name: string, args?: any, options: CallOptions = {}): Promise<T>;
 
+export function on(name: string, cb: ProcedureListener): void;
+export function off(name: string, cb: ProcedureListener): void;
+export function trigger(name: string, args?: any): void;
+export function triggerServer(name: string, args?: any): void;
+export function triggerClient(player: Player, name: string, args?: any): void;
+export function triggerClient(name: string, args?: any): void;
+export function triggerBrowsers(player: Player, name: string, args?: any): void;
+export function triggerBrowsers(name: string, args?: any): void;
+export function triggerBrowser(browser: Browser, name: string, args?: any): void;
+
 export interface Player {
     call: (eventName: string, args?: any[]) => void;
     [property: string]: any;

@@ -24,6 +24,7 @@ declare interface ProcedureListenerInfo {
 
 declare interface CallOptions {
     timeout?: number;
+    noRet?: boolean;
 }
 
 declare interface Event {
@@ -37,4 +38,5 @@ declare interface Event {
     fenv?: string;
     res?: any;
     err?: any;
+    noRet?: number;
 }

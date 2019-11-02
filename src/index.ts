@@ -360,7 +360,7 @@ function _callBrowsers(player: Player, name: string, args?: any, extraData: any 
  * @param options - Any options.
  * @returns The result from the procedure.
  */
-export function callBrowsers(player: Player | string, name?: string | any, args?: any, options?: CallOptions): Promise<any> {
+export function callBrowsers(player: Player | string, name?: string | any, args?: any, options: CallOptions = {}): Promise<any> {
     let promise;
     let extraData: any = {};
 
@@ -397,7 +397,7 @@ export function callBrowsers(player: Player | string, name?: string | any, args?
  * @param options - Any options.
  * @returns The result from the procedure.
  */
-export function callBrowser(browser: Browser, name: string, args?: any, options?: CallOptions): Promise<any> {
+export function callBrowser(browser: Browser, name: string, args?: any, options: CallOptions = {}): Promise<any> {
     if(environment !== 'client') return util.promiseReject('callBrowser can only be used in the client environment');
     if(arguments.length < 2 || arguments.length > 4) return util.promiseReject('callBrowser expects 2 to 4 arguments: "browser", "name", optional "args", and optional "options"');
 

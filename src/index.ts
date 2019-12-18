@@ -143,11 +143,14 @@ function callProcedure(name: string, args: any, info: ProcedureListenerInfo): Pr
  * Register a procedure.
  * @param {string} name - The name of the procedure.
  * @param {function} cb - The procedure's callback. The return value will be sent back to the caller.
+ * @returns {Function} The function, which unregister the event.
  */
-export function register(name: string, cb: ProcedureListener): void {
+export function register(name: string, cb: ProcedureListener): Function {
     if(arguments.length !== 2) throw 'register expects 2 arguments: "name" and "cb"';
     if(environment === "cef") glob[IDENTIFIER].then((id: string) => mp.trigger(BROWSER_REGISTER, JSON.stringify([id, name])));
     glob.__rpcListeners[name] = cb;
+
+    return () => unregister(name);
 }
 
 /**
@@ -418,13 +421,16 @@ function callEvent(name: string, args: any, info: ProcedureListenerInfo){
  * Register an event handler.
  * @param {string} name - The name of the event.
  * @param cb - The callback for the event.
+ * @returns {Function} The function, which off the event.
  */
-export function on(name: string, cb: ProcedureListener){
+export function on(name: string, cb: ProcedureListener): Function {
     if(arguments.length !== 2) throw 'on expects 2 arguments: "name" and "cb"';
 
     const listeners = glob.__rpcEvListeners[name] || new Set();
     listeners.add(cb);
     glob.__rpcEvListeners[name] = listeners;
+
+    return () => off(name, cb);
 }
 
 /**

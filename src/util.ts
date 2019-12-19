@@ -120,3 +120,17 @@ export function isBrowserValid(browser: Browser): boolean {
     }catch(e){ return false; }
     return true;
 }
+
+export function chunkSubstr(str: string, size: number): Array<String> {
+    const numChunks = Math.ceil(str.length / size);
+    const chunks = new Array(numChunks);
+
+    let index = 0;
+    for (let i = 0; i < numChunks; i += 1) {
+        chunks[i] = str.substr(index, size);
+
+        index += size;
+    }
+  
+    return chunks;
+}

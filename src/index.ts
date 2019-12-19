@@ -4,7 +4,7 @@ const environment = util.getEnvironment();
 if(!environment) throw 'Unknown RAGE environment';
 
 const ERR_NOT_FOUND = 'PROCEDURE_NOT_FOUND';
-const MAX_DATA_SIZE = 10;
+const MAX_DATA_SIZE = 32000;
 
 const IDENTIFIER = '__rpc:id';
 const PROCESS_EVENT = '__rpc:process';
@@ -33,9 +33,9 @@ if(!glob[PROCESS_EVENT_PARTIAL]){
 
         if(!glob.__rpcPartialData[id].includes(undefined)){
             if(environment !== "server"){
-                glob[PROCESS_EVENT](glob.__rpcPartialData[id].join());
+                glob[PROCESS_EVENT](glob.__rpcPartialData[id].join(''));
             }else{
-                glob[PROCESS_EVENT](player, glob.__rpcPartialData[id].join());
+                glob[PROCESS_EVENT](player, glob.__rpcPartialData[id].join(''));
             }
             delete glob.__rpcPartialData[id];
         }
@@ -168,6 +168,25 @@ function callProcedure(name: string, args: any, info: ProcedureListenerInfo): Pr
     return util.promiseResolve(listener(args, info));
 }
 
+function sendEventData(event: Event, player?: Player) {
+    const callEnvFunc = {
+        client: (event: string, ...args: any[]) => mp.events.callRemote(event, ...args),
+        server: (event: string, ...args: any[]) => player.call(event, [...args]),
+    };
+
+    const env = event.env as keyof typeof callEnvFunc;
+
+    const sendString = util.stringifyData(event);
+    if(sendString.length > MAX_DATA_SIZE){
+        const parts = util.chunkSubstr(sendString, MAX_DATA_SIZE);
+        parts.forEach((partString, index) => {
+            callEnvFunc[env](PROCESS_EVENT_PARTIAL, event.id, index, parts.length, partString);
+        });
+    }else{
+        callEnvFunc[env](PROCESS_EVENT, sendString);
+    }
+}
+
 /**
  * Register a procedure.
  * @param {string} name - The name of the procedure.
@@ -228,7 +247,7 @@ function _callServer(name: string, args?: any, extraData: any = {}): Promise<any
                     args,
                     ...extraData
                 };
-                mp.events.callRemote(PROCESS_EVENT, util.stringifyData(event));
+                sendEventData(event);
             });
         }
         case "cef": {
@@ -278,16 +297,7 @@ function _callClient(player: Player, name: string, args?: any, extraData: any = 
                     args,
                     ...extraData
                 };
-
-                const sendString = util.stringifyData(event);
-                if(sendString.length > MAX_DATA_SIZE){
-                    const parts = util.chunkSubstr(sendString, MAX_DATA_SIZE);
-                    parts.forEach((partString, index) => {
-                        player.call(PROCESS_EVENT_PARTIAL, [index, id, parts.length, partString]);
-                    });
-                }else{
-                    player.call(PROCESS_EVENT, [sendString]);
-                }
+                sendEventData(event, player);
             });
         }
         case 'cef': {

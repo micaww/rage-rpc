@@ -1,6 +1,6 @@
 {
   "name": "rage-rpc",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "An asynchronous RPC implementation for RAGE Multiplayer",
   "main": "dist/rage-rpc.min.js",
   "types": "dist/rage-rpc.d.ts",
@@ -24,13 +24,13 @@
   "homepage": "https://github.com/micaww/rage-rpc#readme",
   "dependencies": {},
   "devDependencies": {
-    "@babel/core": "^7.6.4",
-    "@babel/preset-env": "^7.6.3",
-    "@babel/preset-typescript": "^7.6.0",
+    "@babel/core": "^7.7.7",
+    "@babel/preset-env": "^7.7.7",
+    "@babel/preset-typescript": "^7.7.7",
     "babel-loader": "^8.0.6",
     "replace-in-file-webpack-plugin": "^1.0.6",
-    "typescript": "^3.6.4",
-    "webpack": "^4.41.2",
+    "typescript": "^3.7.4",
+    "webpack": "^4.41.4",
     "webpack-cli": "^3.3.10"
   }
 }

@@ -4,15 +4,43 @@ const environment = util.getEnvironment();
 if(!environment) throw 'Unknown RAGE environment';
 
 const ERR_NOT_FOUND = 'PROCEDURE_NOT_FOUND';
+const MAX_DATA_SIZE = 32000;
 
 const IDENTIFIER = '__rpc:id';
 const PROCESS_EVENT = '__rpc:process';
+const PROCESS_EVENT_PARTIAL = '__rpc:processPartial';
 const BROWSER_REGISTER = '__rpc:browserRegister';
 const BROWSER_UNREGISTER = '__rpc:browserUnregister';
 const TRIGGER_EVENT = '__rpc:triggerEvent';
 const TRIGGER_EVENT_BROWSERS = '__rpc:triggerEventBrowsers';
 
 const glob = environment === 'cef' ? window : global;
+
+if(!glob[PROCESS_EVENT_PARTIAL]){
+    glob.__rpcPartialData = {};
+
+    glob[PROCESS_EVENT_PARTIAL] = (player: Player | string | number, id: number, index: number, size: number | string, rawData?: string) => {
+        if(environment !== "server"){
+            rawData = size as string;
+            size = index as number;
+            index = id as number;
+            id = player as number;
+        }
+        if(!glob.__rpcPartialData[id]){
+            glob.__rpcPartialData[id] = new Array(size);
+        }
+        glob.__rpcPartialData[id][index] = rawData;
+
+        if(!glob.__rpcPartialData[id].includes(undefined)){
+            if(environment !== "server"){
+                glob[PROCESS_EVENT](glob.__rpcPartialData[id].join(''));
+            }else{
+                glob[PROCESS_EVENT](player, glob.__rpcPartialData[id].join(''));
+            }
+            delete glob.__rpcPartialData[id];
+        }
+    };
+}
 
 if(!glob[PROCESS_EVENT]){
     glob.__rpcListeners = {};
@@ -69,6 +97,7 @@ if(!glob[PROCESS_EVENT]){
 
     if(environment !== "cef"){
         mp.events.add(PROCESS_EVENT, glob[PROCESS_EVENT]);
+        mp.events.add(PROCESS_EVENT_PARTIAL, glob[PROCESS_EVENT_PARTIAL]);
 
         if(environment === "client"){
             // set up internal pass-through events
@@ -139,6 +168,25 @@ function callProcedure(name: string, args: any, info: ProcedureListenerInfo): Pr
     return util.promiseResolve(listener(args, info));
 }
 
+function sendEventData(event: Event, player?: Player) {
+    const callEnvFunc = {
+        client: (event: string, ...args: any[]) => mp.events.callRemote(event, ...args),
+        server: (event: string, ...args: any[]) => player.call(event, [...args]),
+    };
+
+    const env = event.env as keyof typeof callEnvFunc;
+
+    const sendString = util.stringifyData(event);
+    if(sendString.length > MAX_DATA_SIZE){
+        const parts = util.chunkSubstr(sendString, MAX_DATA_SIZE);
+        parts.forEach((partString, index) => {
+            callEnvFunc[env](PROCESS_EVENT_PARTIAL, event.id, index, parts.length, partString);
+        });
+    }else{
+        callEnvFunc[env](PROCESS_EVENT, sendString);
+    }
+}
+
 /**
  * Register a procedure.
  * @param {string} name - The name of the procedure.
@@ -199,7 +247,7 @@ function _callServer(name: string, args?: any, extraData: any = {}): Promise<any
                     args,
                     ...extraData
                 };
-                mp.events.callRemote(PROCESS_EVENT, util.stringifyData(event));
+                sendEventData(event);
             });
         }
         case "cef": {
@@ -249,7 +297,7 @@ function _callClient(player: Player, name: string, args?: any, extraData: any = 
                     args,
                     ...extraData
                 };
-                player.call(PROCESS_EVENT, [util.stringifyData(event)]);
+                sendEventData(event, player);
             });
         }
         case 'cef': {

@@ -55,13 +55,13 @@ if(!glob[PROCESS_EVENT]){
             }
             if(ret){
                 const promise = callProcedure(data.name, data.args, info);
-                if(!data.noRet) promise.then(res => ret({ ...part, res })).catch(err => ret({ ...part, err }));
+                if(!data.noRet) promise.then(res => ret({ ...part, res })).catch(err => ret({ ...part, err: err ? err : null }));
             }
         }else if(data.ret){ // a previously called remote procedure has returned
             const info = glob.__rpcPending[data.id];
             if(environment === "server" && info.player !== player) return;
             if(info){
-                info.resolve(data.err ? util.promiseReject(data.err) : util.promiseResolve(data.res));
+                info.resolve(data.hasOwnProperty('err') ? util.promiseReject(data.err) : util.promiseResolve(data.res));
                 delete glob.__rpcPending[data.id];
             }
         }

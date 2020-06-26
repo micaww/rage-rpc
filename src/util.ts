@@ -96,11 +96,11 @@ export function parseData(data: string): any {
 }
 
 export function promiseResolve(result: any): Promise<any> {
-    return new Promise(resolve => setTimeout(() => resolve(result), 0));
+    return new Promise(resolve => resolve(result));
 }
 
 export function promiseReject(error: any): Promise<any> {
-    return new Promise((_, reject) => setTimeout(() => reject(error), 0));
+    return new Promise((_, reject) => resolve(result));
 }
 
 export function promiseTimeout(promise: Promise<any>, timeout?: number){

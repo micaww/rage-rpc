@@ -41,7 +41,7 @@ if(!glob[PROCESS_EVENT]){
                     break;
                 case "client": {
                     if(data.env === "server"){
-                        ret = ev => mp.events.callRemote(PROCESS_EVENT, util.stringifyData(ev));
+                        ret = ev => global.secureEvents ? mp.events.call('__handle_rpc_proc', util.stringifyData(ev)) : mp.events.callRemote(PROCESS_EVENT, util.stringifyData(ev));
                     }else if(data.env === "cef"){
                         const browser = data.b && glob.__rpcBrowsers[data.b];
                         info.browser = browser;
@@ -199,7 +199,7 @@ function _callServer(name: string, args?: any, extraData: any = {}): Promise<any
                     args,
                     ...extraData
                 };
-                mp.events.callRemote(PROCESS_EVENT, util.stringifyData(event));
+                global.secureEvents ? mp.events.call('__handle_rpc_proc', util.stringifyData(event)) : mp.events.callRemote(PROCESS_EVENT, util.stringifyData(event));
             });
         }
         case "cef": {

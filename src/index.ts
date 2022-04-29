@@ -3,7 +3,10 @@ import * as util from './util';
 const environment = util.getEnvironment();
 if(!environment) throw 'Unknown RAGE environment';
 
-const ERR_NOT_FOUND = 'PROCEDURE_NOT_FOUND';
+const ERR_NOT_FOUND1 = 'PROCEDURE_NOT_FOUND1';
+const ERR_NOT_FOUND2 = 'PROCEDURE_NOT_FOUND2';
+const ERR_NOT_FOUND3 = 'PROCEDURE_NOT_FOUND3';
+const ERR_NOT_FOUND4 = 'PROCEDURE_NOT_FOUND4';
 
 const IDENTIFIER = '__rpc:id';
 const PROCESS_EVENT = '__rpc:process';
@@ -130,12 +133,12 @@ if(!glob[PROCESS_EVENT]){
 
 function passEventToBrowser(browser: Browser, data: Event, ignoreNotFound: boolean): void {
     const raw = util.stringifyData(data);
-    browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process(${JSON.stringify(raw)}); }else{ ${ignoreNotFound ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND}","env":"cef"}');`} }`);
+    browser.execute(`var process = window["${PROCESS_EVENT}"]; if(process){ process(${JSON.stringify(raw)}); }else{ ${ignoreNotFound ? '' : `mp.trigger("${PROCESS_EVENT}", '{"ret":1,"id":"${data.id}","err":"${ERR_NOT_FOUND1}","env":"cef"}');`} }`);
 }
 
 function callProcedure(name: string, args: any, info: ProcedureListenerInfo): Promise<any> {
     const listener = glob.__rpcListeners[name];
-    if(!listener) return Promise.reject(ERR_NOT_FOUND);
+    if(!listener) return Promise.reject(ERR_NOT_FOUND2);
     return Promise.resolve(listener(args, info));
 }
 
@@ -341,9 +344,9 @@ function _callBrowsers(player: Player, name: string, args?: any, extraData: any 
     switch(environment){
         case 'client':
             const browserId = glob.__rpcBrowserProcedures[name];
-            if(!browserId) return Promise.reject(ERR_NOT_FOUND);
+            if(!browserId) return Promise.reject(ERR_NOT_FOUND3);
             const browser = glob.__rpcBrowsers[browserId];
-            if(!browser || !util.isBrowserValid(browser)) return Promise.reject(ERR_NOT_FOUND);
+            if(!browser || !util.isBrowserValid(browser)) return Promise.reject(ERR_NOT_FOUND4);
             return _callBrowser(browser, name, args, extraData);
         case 'server':
             return _callClient(player, '__rpc:callBrowsers', [name, args, +extraData.noRet], extraData);
